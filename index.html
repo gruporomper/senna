@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SENNA — Assistente IA</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand">
+          <div class="helmet-icon">
+          <svg viewBox="0 0 40 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- Helmet shape -->
+            <path d="M20 2C10 2 3 10 3 18c0 4 1.5 7 4 9h26c2.5-2 4-5 4-9 0-8-7-16-17-16z" fill="#FFD700" stroke="#C8A800" stroke-width="1"/>
+            <!-- Visor -->
+            <path d="M7 18c0-3 2-6 5-8h16c3 2 5 5 5 8H7z" fill="#1a1400" opacity="0.7"/>
+            <!-- Diagonal stripes -->
+            <rect x="8" y="6" width="30" height="4" rx="1" transform="rotate(-25 8 6)" fill="#009B3A" opacity="0.8"/>
+            <rect x="8" y="11" width="30" height="3.5" rx="1" transform="rotate(-25 8 11)" fill="#002776" opacity="0.7"/>
+            <rect x="8" y="15.5" width="30" height="2.5" rx="1" transform="rotate(-25 8 15.5)" fill="#009B3A" opacity="0.5"/>
+          </svg>
+        </div>
+          <span class="sidebar-logo">SENNA</span>
+        </div>
+        <button id="sidebarToggle" class="sidebar-toggle-btn" title="Expandir/Encolher">
+          <svg class="icon-collapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M15 18l-6-6 6-6"/>
+          </svg>
+          <svg class="helmet-toggle" viewBox="0 0 40 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 2C10 2 3 10 3 18c0 4 1.5 7 4 9h26c2.5-2 4-5 4-9 0-8-7-16-17-16z" fill="#FFD700" stroke="#C8A800" stroke-width="1"/>
+            <path d="M7 18c0-3 2-6 5-8h16c3 2 5 5 5 8H7z" fill="#1a1400" opacity="0.7"/>
+            <rect x="8" y="6" width="30" height="4" rx="1" transform="rotate(-25 8 6)" fill="#009B3A" opacity="0.8"/>
+            <rect x="8" y="11" width="30" height="3.5" rx="1" transform="rotate(-25 8 11)" fill="#002776" opacity="0.7"/>
+            <rect x="8" y="15.5" width="30" height="2.5" rx="1" transform="rotate(-25 8 15.5)" fill="#009B3A" opacity="0.5"/>
+          </svg>
+        </button>
+      </div>
+
+      <button id="newChatBtn" class="new-chat-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Novo Objetivo
+      </button>
+
+      <!-- Menu Navigation -->
+      <nav class="sidebar-nav">
+        <button class="sidebar-nav-item" id="navBuscar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Pesquisar
+        </button>
+        <div class="sidebar-nav-row">
+          <button class="sidebar-nav-item" id="navProjetos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+            </svg>
+            Projetos
+          </button>
+          <div class="sidebar-nav-actions">
+            <button class="sidebar-nav-action" id="addProjectBtn" title="Novo projeto">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+            <button class="sidebar-nav-action sidebar-nav-chevron" id="expandProjetos" title="Expandir">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="sidebar-nav-row">
+          <button class="sidebar-nav-item" id="navFavoritos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            Favoritos
+          </button>
+          <div class="sidebar-nav-actions">
+            <button class="sidebar-nav-action sidebar-nav-chevron" id="expandFavoritos" title="Expandir">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Recentes label -->
+      <div class="sidebar-section-label">Recentes</div>
+
+      <div id="conversationList" class="conversation-list"></div>
+
+      <div class="sidebar-footer">
+        <div class="top-bar">
+          <div class="stripe s-green"></div>
+          <div class="stripe s-blue"></div>
+          <div class="stripe s-yellow"></div>
+        </div>
+        <button class="profile-btn" id="profileBtn">
+          <div class="profile-avatar">
+            <img src="avatar.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div class="profile-avatar-fallback">MR</div>
+          </div>
+          <div class="profile-info">
+            <span class="profile-name">Marlon Rihayem</span>
+            <span class="profile-plan">Pro</span>
+          </div>
+          <svg class="profile-dots" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+            <circle cx="12" cy="6" r="1.5"/>
+            <circle cx="12" cy="12" r="1.5"/>
+            <circle cx="12" cy="18" r="1.5"/>
+          </svg>
+        </button>
+
+        <!-- Profile Menu -->
+        <div class="profile-menu hidden" id="profileMenu">
+          <button class="profile-menu-item" data-action="personalizar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+            </svg>
+            Personalizar
+          </button>
+          <button class="profile-menu-item" data-action="perfil">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            Perfil
+          </button>
+          <button class="profile-menu-item" data-action="configuracoes">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Configurações
+          </button>
+          <div class="profile-menu-divider"></div>
+          <button class="profile-menu-item" data-action="ajuda">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
+              <circle cx="12" cy="17" r="0.5" fill="currentColor"/>
+            </svg>
+            Ajuda
+          </button>
+          <button class="profile-menu-item profile-menu-danger" data-action="sair">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Sair
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- SIDEBAR OVERLAY (mobile) -->
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+    <!-- SEARCH OVERLAY -->
+    <div id="searchOverlay" class="search-overlay hidden">
+      <div class="search-modal">
+        <div class="search-header">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="searchInput" placeholder="Pesquisar conversas..." autocomplete="off">
+          <button id="searchClose" class="search-close-btn" title="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="search-modes">
+          <button class="search-mode active" data-mode="keyword" id="modeKeyword">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <path d="M4 7h16M4 12h10M4 17h6"/>
+            </svg>
+            Por palavra
+          </button>
+          <button class="search-mode" data-mode="context" id="modeContext">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
+              <circle cx="12" cy="17" r="0.5" fill="currentColor"/>
+            </svg>
+            Por contexto (IA)
+          </button>
+        </div>
+        <div id="searchResults" class="search-results">
+          <div class="search-empty">Digite para pesquisar nas suas conversas</div>
+        </div>
+        <div id="searchLoading" class="search-loading hidden">
+          <div class="search-loading-spinner"></div>
+          <span>Pesquisando por contexto com IA...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN AREA -->
+    <main id="mainArea" class="main-area">
+      <!-- Header -->
+      <header class="main-header">
+        <div class="header-brand"></div>
+        <div class="header-right">
+          <div class="orb-indicator" id="orbIndicator">
+            <div class="orb-indicator-core"></div>
+          </div>
+          <span class="orb-status" id="orbStatus">PRONTO</span>
+        </div>
+      </header>
+
+      <!-- Helmet stripes -->
+      <div class="top-bar">
+        <div class="stripe s-green"></div>
+        <div class="stripe s-blue"></div>
+        <div class="stripe s-yellow"></div>
+      </div>
+
+      <!-- Chat area -->
+      <div class="chat-area" id="chatArea">
+        <!-- Welcome screen (visible when no messages) -->
+        <div class="welcome-screen" id="welcomeScreen">
+          <div class="orb-container">
+            <canvas id="particles"></canvas>
+            <div class="orb-glow"></div>
+            <div class="orb" id="orb">
+              <div class="orb-core">
+                <div class="helmet-stripe hs-1"></div>
+                <div class="helmet-stripe hs-2"></div>
+                <div class="helmet-stripe hs-3"></div>
+              </div>
+              <div class="orb-ring ring-1"></div>
+              <div class="orb-ring ring-2"></div>
+            </div>
+          </div>
+          <h2 class="welcome-title" id="welcomeTitle">Carregando...</h2>
+          <p class="welcome-sub" id="welcomeSub"></p>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <!-- Normal input mode -->
+        <div class="input-wrapper" id="inputWrapper">
+          <button id="cameraBtn" class="btn-camera" title="Câmera">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" class="camera-file-input">
+          </button>
+          <div class="input-row" id="inputRow">
+            <input type="text" id="textInput" placeholder="Fala comigo, Senhor..." autocomplete="off">
+            <div class="input-actions">
+              <button id="micBtn" class="btn-action" title="Falar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="1" width="6" height="12" rx="3"/>
+                  <path d="M19 10v1a7 7 0 01-14 0v-1"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
+                  <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+              </button>
+              <button id="sendBtn" class="btn-action btn-send" title="Enviar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 19V5M5 12l7-7 7 7"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Recording mode -->
+          <div class="recording-row hidden" id="recordingRow">
+            <canvas id="waveform" class="waveform-canvas"></canvas>
+            <button id="cancelRecBtn" class="btn-rec btn-rec-cancel" title="Cancelar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+            <button id="sendRecBtn" class="btn-rec btn-rec-send" title="Enviar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom checkered -->
+      <div class="checkered"></div>
+    </main>
+  </div>
+
+  <script src="context.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
