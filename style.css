@@ -1065,10 +1065,16 @@ html, body {
 
 .orb:hover { transform: scale(1.06); }
 
+.helmet-svg {
+  filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.4)) drop-shadow(0 0 60px rgba(255, 215, 0, 0.15));
+  transition: filter 0.3s;
+}
+
 .orb-core {
   width: 76px;
   height: 76px;
   border-radius: 50%;
+  display: none;
   background: radial-gradient(circle at 30% 30%, var(--yellow-light), var(--yellow), var(--yellow-dark));
   box-shadow:
     0 0 40px rgba(255, 215, 0, 0.35),

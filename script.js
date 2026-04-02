@@ -460,7 +460,9 @@ profileMenu.addEventListener('click', (e) => {
       console.log('Ajuda');
       break;
     case 'sair':
-      console.log('Sair');
+      if (window.sennaSupabase) {
+        window.sennaSupabase.auth.signOut();
+      }
       break;
   }
 });

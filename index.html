@@ -238,11 +238,37 @@
             <canvas id="particles"></canvas>
             <div class="orb-glow"></div>
             <div class="orb" id="orb">
-              <div class="orb-core">
-                <div class="helmet-stripe hs-1"></div>
-                <div class="helmet-stripe hs-2"></div>
-                <div class="helmet-stripe hs-3"></div>
-              </div>
+              <svg class="helmet-svg" viewBox="0 0 120 100" width="120" height="100">
+                <!-- Helmet shell - side profile -->
+                <defs>
+                  <clipPath id="helmetClip">
+                    <path d="M95,65 C95,30 75,8 45,8 C20,8 8,28 8,50 C8,65 12,72 20,78 L30,82 L85,82 C90,82 95,78 95,72 Z"/>
+                  </clipPath>
+                  <radialGradient id="helmetGrad" cx="35%" cy="35%">
+                    <stop offset="0%" stop-color="#FFF4A0"/>
+                    <stop offset="40%" stop-color="#FFD700"/>
+                    <stop offset="100%" stop-color="#C8A800"/>
+                  </radialGradient>
+                  <linearGradient id="visorGrad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#1a1a2e" stop-opacity="0.9"/>
+                    <stop offset="100%" stop-color="#0a0a15" stop-opacity="0.95"/>
+                  </linearGradient>
+                </defs>
+                <!-- Helmet body -->
+                <path d="M95,65 C95,30 75,8 45,8 C20,8 8,28 8,50 C8,65 12,72 20,78 L30,82 L85,82 C90,82 95,78 95,72 Z" fill="url(#helmetGrad)" stroke="rgba(255,215,0,0.3)" stroke-width="0.5"/>
+                <!-- Senna stripes -->
+                <g clip-path="url(#helmetClip)">
+                  <rect x="-10" y="32" width="140" height="10" fill="#009B3A" transform="rotate(-18 60 45)" opacity="0.85"/>
+                  <rect x="-10" y="44" width="140" height="8" fill="#0047CC" transform="rotate(-18 60 45)" opacity="0.75"/>
+                  <rect x="-10" y="54" width="140" height="6" fill="#009B3A" transform="rotate(-18 60 45)" opacity="0.5"/>
+                </g>
+                <!-- Visor -->
+                <path d="M22,52 C22,42 30,35 42,32 L80,28 C84,28 86,30 86,34 L86,50 C86,56 82,60 76,62 L30,68 C25,68 22,64 22,58 Z" fill="url(#visorGrad)" opacity="0.7"/>
+                <!-- Visor shine -->
+                <path d="M28,48 C30,42 36,38 44,36 L72,32 C74,32 75,33 75,35 L74,42 C73,46 70,48 66,49 L34,54 C30,54 28,52 28,48 Z" fill="rgba(255,255,255,0.06)"/>
+                <!-- Helmet shine -->
+                <ellipse cx="40" cy="22" rx="18" ry="6" fill="rgba(255,255,255,0.15)" transform="rotate(-10 40 22)"/>
+              </svg>
               <div class="orb-ring ring-1"></div>
               <div class="orb-ring ring-2"></div>
             </div>
@@ -304,6 +330,8 @@
     </main>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="auth.js"></script>
   <script src="context.js"></script>
   <script src="script.js"></script>
 </body>
