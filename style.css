@@ -1663,6 +1663,33 @@ body.state-listening .input-row {
   animation: pulse-dot 1s ease-in-out infinite;
 }
 
+.msg-actions-user {
+  justify-content: flex-end;
+}
+
+.msg-edit-save { color: var(--green-light); }
+.msg-edit-cancel { color: var(--text-dim); }
+
+.msg-edit-input {
+  width: 100%;
+  min-height: 40px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 8px 12px;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.msg-edit-input:focus {
+  border-color: rgba(255, 215, 0, 0.3);
+}
+
 /* ===== CONTROLS ===== */
 .controls {
   padding: 10px 16px 14px;

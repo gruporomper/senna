@@ -878,8 +878,9 @@ function addMessage(text, role, save = true) {
   const msg = document.createElement('div');
   msg.className = `chat-message ${role}`;
   const accent = role === 'assistant' ? '<div class="msg-accent"></div>' : '';
-  const actions = role === 'assistant' ? `
-    <div class="msg-actions">
+  let actions = '';
+  if (role === 'assistant') {
+    actions = `<div class="msg-actions">
       <button class="msg-action-btn" data-action="copy" title="Copiar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
       </button>
@@ -892,10 +893,20 @@ function addMessage(text, role, save = true) {
       <button class="msg-action-btn" data-action="speak" title="Ler em voz alta">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
       </button>
-    </div>` : '';
+    </div>`;
+  } else if (role === 'user') {
+    actions = `<div class="msg-actions msg-actions-user">
+      <button class="msg-action-btn" data-action="edit" title="Editar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+      <button class="msg-action-btn" data-action="copy" title="Copiar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+    </div>`;
+  }
   msg.innerHTML = `${accent}<div class="msg-content">${formatMessage(text, role)}</div>${actions}`;
-  // Store raw text for copy/speak actions
-  if (role === 'assistant') msg.dataset.rawText = text;
+  // Store raw text for actions
+  msg.dataset.rawText = text;
   messagesWrap.appendChild(msg);
   chatArea.scrollTop = chatArea.scrollHeight;
 
@@ -1411,7 +1422,61 @@ messagesWrap.addEventListener('click', (e) => {
   const msgEl = btn.closest('.chat-message');
   const rawText = msgEl?.dataset.rawText || msgEl?.querySelector('.msg-content')?.textContent || '';
 
-  if (action === 'copy') {
+  if (action === 'edit') {
+    // Replace message content with editable input
+    const content = msgEl.querySelector('.msg-content');
+    const actionsEl = msgEl.querySelector('.msg-actions');
+    const originalText = rawText;
+    content.innerHTML = `<textarea class="msg-edit-input">${originalText}</textarea>`;
+    actionsEl.innerHTML = `
+      <button class="msg-action-btn msg-edit-save" data-action="edit-save" title="Salvar e reenviar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </button>
+      <button class="msg-action-btn msg-edit-cancel" data-action="edit-cancel" title="Cancelar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>`;
+    const textarea = content.querySelector('.msg-edit-input');
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  } else if (action === 'edit-save') {
+    const textarea = msgEl.querySelector('.msg-edit-input');
+    const newText = textarea.value.trim();
+    if (newText && currentState === 'idle') {
+      // Remove all messages from this point onward
+      const allMsgs = [...messagesWrap.querySelectorAll('.chat-message')];
+      const idx = allMsgs.indexOf(msgEl);
+      for (let i = allMsgs.length - 1; i >= idx; i--) {
+        allMsgs[i].remove();
+      }
+      // Trim conversation history to match
+      const userMsgs = conversationHistory.filter(m => m.role === 'user');
+      let histIdx = 0;
+      for (let i = 0; i < idx; i++) {
+        if (allMsgs[i].classList.contains('user')) histIdx++;
+      }
+      // Keep system + messages before this user message
+      const sysPrompt = conversationHistory[0];
+      const nonSysMsgs = conversationHistory.filter(m => m.role !== 'system');
+      // Count pairs: each user msg + its response
+      let keepCount = 0;
+      for (let i = 0; i < idx; i++) keepCount++;
+      conversationHistory = [sysPrompt, ...nonSysMsgs.slice(0, keepCount)];
+      // Send edited message as new
+      processCommand(newText);
+    }
+  } else if (action === 'edit-cancel') {
+    const content = msgEl.querySelector('.msg-content');
+    const actionsEl = msgEl.querySelector('.msg-actions');
+    const originalText = msgEl.dataset.rawText;
+    content.innerHTML = `<p>${originalText}</p>`;
+    actionsEl.innerHTML = `
+      <button class="msg-action-btn" data-action="edit" title="Editar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </button>
+      <button class="msg-action-btn" data-action="copy" title="Copiar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>`;
+  } else if (action === 'copy') {
     navigator.clipboard.writeText(rawText).then(() => {
       btn.classList.add('copied');
       btn.title = 'Copiado!';
