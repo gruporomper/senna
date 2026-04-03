@@ -74,7 +74,7 @@ html, body {
   flex-shrink: 0;
 }
 
-.helmet-icon svg {
+.helmet-icon img {
   width: 100%;
   height: 100%;
 }
@@ -1066,6 +1066,8 @@ html, body {
 .orb:hover { transform: scale(1.06); }
 
 .helmet-svg {
+  width: 120px;
+  height: auto;
   filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.4)) drop-shadow(0 0 60px rgba(255, 215, 0, 0.15));
   transition: filter 0.3s;
 }
