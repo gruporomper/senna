@@ -878,7 +878,24 @@ function addMessage(text, role, save = true) {
   const msg = document.createElement('div');
   msg.className = `chat-message ${role}`;
   const accent = role === 'assistant' ? '<div class="msg-accent"></div>' : '';
-  msg.innerHTML = `${accent}<div class="msg-content">${formatMessage(text, role)}</div>`;
+  const actions = role === 'assistant' ? `
+    <div class="msg-actions">
+      <button class="msg-action-btn" data-action="copy" title="Copiar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+      <button class="msg-action-btn" data-action="retry" title="Tentar novamente">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+      </button>
+      <button class="msg-action-btn" data-action="branch" title="Derivar conversa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+      </button>
+      <button class="msg-action-btn" data-action="speak" title="Ler em voz alta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
+      </button>
+    </div>` : '';
+  msg.innerHTML = `${accent}<div class="msg-content">${formatMessage(text, role)}</div>${actions}`;
+  // Store raw text for copy/speak actions
+  if (role === 'assistant') msg.dataset.rawText = text;
   messagesWrap.appendChild(msg);
   chatArea.scrollTop = chatArea.scrollHeight;
 
@@ -1385,6 +1402,108 @@ function stopWaveform() {
     analyser = null;
   }
 }
+
+// ===== MESSAGE ACTIONS =====
+messagesWrap.addEventListener('click', (e) => {
+  const btn = e.target.closest('.msg-action-btn');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const msgEl = btn.closest('.chat-message');
+  const rawText = msgEl?.dataset.rawText || msgEl?.querySelector('.msg-content')?.textContent || '';
+
+  if (action === 'copy') {
+    navigator.clipboard.writeText(rawText).then(() => {
+      btn.classList.add('copied');
+      btn.title = 'Copiado!';
+      setTimeout(() => { btn.classList.remove('copied'); btn.title = 'Copiar'; }, 2000);
+    });
+  } else if (action === 'retry') {
+    // Find the last user message before this assistant message
+    const allMsgs = [...messagesWrap.querySelectorAll('.chat-message')];
+    const idx = allMsgs.indexOf(msgEl);
+    let userText = '';
+    for (let i = idx - 1; i >= 0; i--) {
+      if (allMsgs[i].classList.contains('user') && !allMsgs[i].classList.contains('live-transcript')) {
+        userText = allMsgs[i].querySelector('.msg-content')?.textContent || '';
+        break;
+      }
+    }
+    if (userText && currentState === 'idle') {
+      // Remove this assistant message
+      msgEl.remove();
+      // Remove last assistant entry from history
+      for (let i = conversationHistory.length - 1; i >= 0; i--) {
+        if (conversationHistory[i].role === 'assistant') {
+          conversationHistory.splice(i, 1);
+          break;
+        }
+      }
+      // Re-call API (user message still in history)
+      setState('thinking');
+      fetch('/api/grok', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: GROK_MODEL,
+          messages: conversationHistory,
+          temperature: 0.9,
+          max_tokens: 1000
+        })
+      }).then(r => r.json()).then(data => {
+        const response = data.choices?.[0]?.message?.content || 'Sem resposta.';
+        conversationHistory.push({ role: 'assistant', content: response });
+        addMessage(response, 'assistant');
+        setState('idle');
+      }).catch(() => {
+        addMessage('Erro ao tentar novamente.', 'assistant');
+        setState('idle');
+      });
+    }
+  } else if (action === 'branch') {
+    // Create new conversation with history up to this point
+    const allMsgs = [...messagesWrap.querySelectorAll('.chat-message')];
+    const idx = allMsgs.indexOf(msgEl);
+    const branchHistory = [conversationHistory[0]]; // system prompt
+    let msgCount = 0;
+    for (let i = 0; i < allMsgs.length && allMsgs[i] !== msgEl; i++) {
+      // skip, count
+    }
+    // Copy conversation history up to this message
+    const historyMsgs = conversationHistory.filter(m => m.role !== 'system');
+    let targetIdx = 0;
+    for (let i = 0; i <= idx && targetIdx < historyMsgs.length; i++) {
+      branchHistory.push(historyMsgs[targetIdx]);
+      targetIdx++;
+    }
+    const newConv = ConversationManager.create();
+    const branchMsgs = branchHistory.filter(m => m.role !== 'system');
+    const parentTitle = ConversationManager.get(activeConversationId)?.title || 'Derivação';
+    // Update the new conversation with branch data
+    const all = ConversationManager.getAll();
+    const conv = all.find(c => c.id === newConv.id);
+    if (conv) {
+      conv.messages = branchMsgs;
+      conv.title = '↳ ' + parentTitle;
+      ConversationManager.saveAll(all);
+    }
+    loadConversation(newConv.id);
+    renderConversationList();
+  } else if (action === 'speak') {
+    if (currentState === 'speaking') {
+      if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+      synthesis.cancel();
+      setState('idle');
+      btn.classList.remove('speaking');
+    } else {
+      btn.classList.add('speaking');
+      setState('speaking');
+      speak(rawText, () => {
+        setState('idle');
+        btn.classList.remove('speaking');
+      });
+    }
+  }
+});
 
 // ===== EVENT LISTENERS =====
 

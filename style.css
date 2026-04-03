@@ -1620,6 +1620,53 @@ body.state-listening .input-row {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ===== MESSAGE ACTIONS ===== */
+.msg-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.chat-message:hover .msg-actions,
+.msg-actions:focus-within {
+  opacity: 1;
+}
+
+.msg-action-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.msg-action-btn:hover {
+  background: rgba(255, 215, 0, 0.08);
+  color: var(--text);
+}
+
+.msg-action-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.msg-action-btn.copied {
+  color: var(--green-light);
+}
+
+.msg-action-btn.speaking {
+  color: var(--yellow);
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
 /* ===== CONTROLS ===== */
 .controls {
   padding: 10px 16px 14px;
