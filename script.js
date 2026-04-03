@@ -895,9 +895,10 @@ function startRecording() {
   voiceTranscript = '';
   setState('listening');
 
-  // Show recording bar, hide input
+  // Show recording bar, hide input and attach
   inputRow.classList.add('hidden');
   recordingRow.classList.remove('hidden');
+  document.querySelector('.attach-wrapper').classList.add('hidden');
 
   // Start speech recognition
   try {
@@ -922,9 +923,10 @@ function stopRecording() {
   // Stop waveform
   stopWaveform();
 
-  // Show input, hide recording bar
+  // Show input and attach, hide recording bar
   inputRow.classList.remove('hidden');
   recordingRow.classList.add('hidden');
+  document.querySelector('.attach-wrapper').classList.remove('hidden');
 }
 
 function cancelRecording() {

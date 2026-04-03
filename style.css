@@ -1506,6 +1506,10 @@ body.state-listening .input-row {
   pointer-events: none;
 }
 
+.attach-wrapper.hidden {
+  display: none;
+}
+
 .input-row {
   display: flex;
   align-items: center;
