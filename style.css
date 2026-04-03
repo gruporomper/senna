@@ -1029,46 +1029,16 @@ html, body {
   font-weight: 500;
 }
 
-.home-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: 1px solid rgba(255, 215, 0, 0.15);
-  border-radius: 20px;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-
-.home-btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-.home-btn:hover {
-  color: var(--yellow);
-  border-color: rgba(255, 215, 0, 0.35);
-  background: rgba(255, 215, 0, 0.06);
-}
-
-body:not(.session-mode) .home-btn {
-  display: none;
-}
-
+.home-btn,
 .open-session-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
-  border: 1px solid rgba(255, 215, 0, 0.15);
+  padding: 7px 16px;
+  border: 1px solid rgba(255, 215, 0, 0.25);
   border-radius: 20px;
-  background: transparent;
-  color: var(--text-dim);
+  background: rgba(255, 215, 0, 0.06);
+  color: var(--text);
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
@@ -1076,15 +1046,18 @@ body:not(.session-mode) .home-btn {
   white-space: nowrap;
 }
 
+.home-btn svg,
 .open-session-btn svg {
   width: 14px;
   height: 14px;
+  color: var(--yellow);
 }
 
+.home-btn:hover,
 .open-session-btn:hover {
   color: var(--yellow);
-  border-color: rgba(255, 215, 0, 0.35);
-  background: rgba(255, 215, 0, 0.06);
+  border-color: rgba(255, 215, 0, 0.45);
+  background: rgba(255, 215, 0, 0.1);
 }
 
 body.session-mode .open-session-btn {
