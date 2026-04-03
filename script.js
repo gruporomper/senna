@@ -688,6 +688,7 @@ const cockpitObjective = document.getElementById('cockpitObjective');
 function setWelcomeMini() {
   welcomeScreen.classList.add('mini');
   cockpit.classList.remove('hidden');
+  if (!particlesRunning) startParticles();
   // Load cockpit data from conversation
   if (activeConversationId) {
     const conv = ConversationManager.get(activeConversationId);
