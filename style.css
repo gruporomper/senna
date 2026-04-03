@@ -50,8 +50,8 @@ html, body {
 }
 
 .sidebar.collapsed {
-  width: 52px;
-  min-width: 52px;
+  width: 76px;
+  min-width: 76px;
 }
 
 .sidebar-header {
@@ -122,14 +122,24 @@ html, body {
 .sidebar.collapsed .sidebar-toggle-btn {
   width: 36px;
   height: 32px;
+  margin: 0 auto;
 }
 
 /* ===== SIDEBAR COLLAPSED STATE ===== */
-.sidebar.collapsed .sidebar-brand,
+.sidebar.collapsed .sidebar-logo,
 .sidebar.collapsed .sidebar-version,
 .sidebar.collapsed .sidebar-section-label,
 .sidebar.collapsed .conversation-list {
   display: none;
+}
+
+.sidebar.collapsed .sidebar-brand {
+  justify-content: center;
+}
+
+.sidebar.collapsed .helmet-icon {
+  width: 36px;
+  height: 32px;
 }
 
 .sidebar.collapsed .sidebar-header {
@@ -139,16 +149,25 @@ html, body {
 
 .sidebar.collapsed .new-chat-btn {
   margin: 8px 6px;
-  padding: 10px 0;
+  padding: 10px 6px;
   justify-content: center;
+  flex-direction: column;
+  align-items: center;
   border-style: solid;
   font-size: 0;
   gap: 0;
 }
 
 .sidebar.collapsed .new-chat-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
+}
+
+.sidebar.collapsed .new-chat-btn span,
+.sidebar.collapsed .new-chat-btn {
+  font-size: 9px;
+  letter-spacing: 0;
+  gap: 4px;
 }
 
 .sidebar.collapsed .sidebar-nav {
@@ -156,15 +175,20 @@ html, body {
 }
 
 .sidebar.collapsed .sidebar-nav-item {
-  padding: 10px 0;
+  padding: 8px 4px;
   justify-content: center;
-  font-size: 0;
-  gap: 0;
+  flex-direction: column;
+  align-items: center;
+  font-size: 9px;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar.collapsed .sidebar-nav-item svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 
 .sidebar.collapsed .sidebar-footer .top-bar {
@@ -597,18 +621,39 @@ html, body {
 }
 
 /* Collapsed sidebar: hide profile info */
-.sidebar.collapsed .profile-info,
 .sidebar.collapsed .profile-dots {
   display: none;
 }
 
 .sidebar.collapsed .profile-btn {
   justify-content: center;
-  padding: 10px 0;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 4px;
+  gap: 4px;
+}
+
+.sidebar.collapsed .profile-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sidebar.collapsed .profile-name {
+  font-size: 9px;
+  text-align: center;
+  max-width: 68px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .profile-plan {
+  display: none;
 }
 
 .sidebar.collapsed .profile-menu {
-  left: 56px;
+  left: 80px;
   right: auto;
   bottom: 12px;
   width: 240px;
