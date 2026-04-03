@@ -1360,6 +1360,17 @@ body.state-listening .input-row {
   border-radius: 16px 4px 16px 16px;
 }
 
+.chat-message.live-transcript {
+  opacity: 0.6;
+  border-style: dashed;
+  font-style: italic;
+  animation: pulse-transcript 1.5s ease-in-out infinite;
+}
+@keyframes pulse-transcript {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.4; }
+}
+
 /* Message content typography */
 .msg-content p {
   margin-bottom: 10px;

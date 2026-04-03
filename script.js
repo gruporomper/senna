@@ -918,12 +918,17 @@ function initSpeechRecognition() {
   };
 
   recognition.onresult = (event) => {
+    let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       const transcript = event.results[i][0].transcript;
       if (event.results[i].isFinal) {
         voiceTranscript += transcript + ' ';
+      } else {
+        interim += transcript;
       }
     }
+    // Show live transcription in chat area
+    updateLiveTranscript(voiceTranscript + interim);
   };
 
   recognition.onerror = (event) => {
@@ -989,13 +994,38 @@ function stopRecording() {
   recordingRow.classList.add('hidden');
 }
 
+// Live transcription bubble in chat
+function updateLiveTranscript(text) {
+  let bubble = document.getElementById('liveTranscript');
+  if (!text.trim()) {
+    if (bubble) bubble.remove();
+    return;
+  }
+  if (!bubble) {
+    bubble = document.createElement('div');
+    bubble.id = 'liveTranscript';
+    bubble.className = 'chat-message user live-transcript';
+    chatArea.appendChild(bubble);
+    welcomeScreen.classList.add('hidden');
+  }
+  bubble.textContent = text;
+  chatArea.scrollTop = chatArea.scrollHeight;
+}
+
+function removeLiveTranscript() {
+  const bubble = document.getElementById('liveTranscript');
+  if (bubble) bubble.remove();
+}
+
 function cancelRecording() {
   voiceTranscript = '';
+  removeLiveTranscript();
   stopRecording();
 }
 
 function sendRecording() {
   const text = voiceTranscript.trim();
+  removeLiveTranscript();
   stopRecording();
   if (text) {
     processCommand(text, true);
@@ -1046,7 +1076,7 @@ function drawWaveform() {
     // Push to history (scrolling waveform)
     waveformHistory.push(avg);
 
-    const barWidth = 3;
+    const barWidth = 4;
     const barGap = 2;
     const totalBarWidth = barWidth + barGap;
     const maxBars = Math.floor(waveformCanvas.width / totalBarWidth);
@@ -1059,23 +1089,28 @@ function drawWaveform() {
     waveformCtx.clearRect(0, 0, waveformCanvas.width, h);
 
     const centerY = h / 2;
-    const startX = waveformCanvas.width - waveformHistory.length * totalBarWidth;
+    // Center the bars in the canvas
+    const totalWidth = waveformHistory.length * totalBarWidth;
+    const startX = (waveformCanvas.width - totalWidth) / 2;
 
     for (let i = 0; i < waveformHistory.length; i++) {
       const amp = waveformHistory[i];
-      // Smooth amplitude with minimum height
-      const barH = Math.max(3, amp * h * 0.85);
+      // More dynamic range — amplify the signal
+      const barH = Math.max(4, amp * h * 1.2);
       const x = startX + i * totalBarWidth;
       const y = centerY - barH / 2;
 
-      // Rounded bars with gradient opacity based on position
-      const distFromEnd = waveformHistory.length - i;
-      const fadeIn = Math.min(1, i / 10); // fade in from left
-      const opacity = fadeIn * (distFromEnd < 3 ? 0.9 : 0.65);
+      // Fade edges, bright center
+      const distFromCenter = Math.abs(i - waveformHistory.length / 2) / (waveformHistory.length / 2);
+      const opacity = Math.max(0.3, 1 - distFromCenter * 0.5);
 
-      waveformCtx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+      // Green tint when actively speaking (high amplitude)
+      if (amp > 0.15) {
+        waveformCtx.fillStyle = `rgba(0, 200, 74, ${opacity})`;
+      } else {
+        waveformCtx.fillStyle = `rgba(255, 255, 255, ${opacity * 0.7})`;
+      }
 
-      // Draw rounded bar
       const radius = Math.min(barWidth / 2, barH / 2);
       waveformCtx.beginPath();
       waveformCtx.roundRect(x, y, barWidth, barH, radius);
