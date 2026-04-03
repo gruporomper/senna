@@ -836,6 +836,11 @@ function closeSession() {
 // Open session button
 openSessionBtn.addEventListener('click', () => openSession(false));
 
+// Home button — return to perpetual mode
+document.getElementById('homeBtn').addEventListener('click', () => {
+  if (isSessionMode) closeSession();
+});
+
 // ===== SESSION CLOSURE =====
 function showClosureToast(message) {
   let toast = document.querySelector('.closure-toast');

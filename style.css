@@ -1029,6 +1029,37 @@ html, body {
   font-weight: 500;
 }
 
+.home-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.home-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.home-btn:hover {
+  color: var(--yellow);
+  border-color: rgba(255, 215, 0, 0.35);
+  background: rgba(255, 215, 0, 0.06);
+}
+
+body:not(.session-mode) .home-btn {
+  display: none;
+}
+
 .open-session-btn {
   display: flex;
   align-items: center;
@@ -2233,10 +2264,12 @@ body.state-listening .input-row {
     max-width: 92%;
   }
 
+  .home-btn span,
   .open-session-btn span {
     display: none;
   }
 
+  .home-btn,
   .open-session-btn {
     padding: 6px 8px;
   }
