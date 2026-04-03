@@ -365,7 +365,6 @@ const perpetualHome = document.getElementById('perpetualHome');
 const perpetualChatArea = document.getElementById('perpetualChatArea');
 const perpetualMessages = document.getElementById('perpetualMessages');
 const perpetualGreeting = document.getElementById('perpetualGreeting');
-const openSessionBtn = document.getElementById('openSessionBtn');
 const textInput = document.getElementById('textInput');
 const sendBtn = document.getElementById('sendBtn');
 const micBtn = document.getElementById('micBtn');
@@ -770,10 +769,27 @@ function addPerpetualMessage(text, role) {
 
   const msg = document.createElement('div');
   msg.className = `chat-message ${role}`;
+  let actions = '';
   if (role === 'assistant') {
-    msg.innerHTML = `<div class="msg-content">${formatMessage(text, role)}</div>`;
+    actions = `<div class="msg-actions">
+      <button class="msg-action-btn" data-action="copy" title="Copiar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+      <button class="msg-action-btn" data-action="retry" title="Tentar novamente">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+      </button>
+      <button class="msg-action-btn" data-action="speak" title="Ler em voz alta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
+      </button>
+    </div>`;
+    msg.innerHTML = `<div class="msg-content">${formatMessage(text, role)}</div>${actions}`;
   } else {
-    msg.innerHTML = `<div class="msg-content">${escapeHtml(text)}</div>`;
+    actions = `<div class="msg-actions msg-actions-user">
+      <button class="msg-action-btn" data-action="copy" title="Copiar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+    </div>`;
+    msg.innerHTML = `<div class="msg-content">${escapeHtml(text)}</div>${actions}`;
   }
   msg.dataset.rawText = text;
   perpetualMessages.appendChild(msg);
@@ -830,12 +846,12 @@ function closeSession() {
   }
 
   if (!particlesRunning) startParticles();
+  updateDashSessionCount();
+  loadDashTasks();
+  loadDashNotes();
   renderConversationList();
   textInput.focus();
 }
-
-// Open session button
-openSessionBtn.addEventListener('click', () => openSession(false));
 
 // Home button — return to perpetual mode
 document.getElementById('homeBtn').addEventListener('click', () => {
@@ -2366,6 +2382,128 @@ function updatePerpetualGreeting() {
   perpetualGreeting.textContent = greetings[Math.floor(Math.random() * greetings.length)];
 }
 
+// ===== DASHBOARD WIDGETS =====
+
+function initDashboard() {
+  updateDashClock();
+  setInterval(updateDashClock, 1000);
+  updateDashWeather();
+  updateDashSessionCount();
+  loadDashTasks();
+  loadDashNotes();
+}
+
+function updateDashClock() {
+  const now = new Date();
+  const timeEl = document.getElementById('dashTime');
+  const dateEl = document.getElementById('dashDate');
+  if (!timeEl || !dateEl) return;
+
+  timeEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+  dateEl.textContent = now.toLocaleDateString('pt-BR', options);
+}
+
+async function updateDashWeather() {
+  const tempEl = document.getElementById('dashTemp');
+  const cityEl = document.getElementById('dashCity');
+  if (!tempEl || !cityEl) return;
+
+  try {
+    // Try to get user location for weather
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&timezone=auto`);
+          const data = await res.json();
+          if (data.current) {
+            tempEl.textContent = Math.round(data.current.temperature_2m) + '°';
+            // Reverse geocode for city name
+            try {
+              const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=&latitude=${latitude}&longitude=${longitude}&count=1`);
+              cityEl.textContent = getCityFromTimezone(data.timezone);
+            } catch {
+              cityEl.textContent = getCityFromTimezone(data.timezone);
+            }
+          }
+        } catch {
+          tempEl.textContent = '--°';
+          cityEl.textContent = 'Sem dados';
+        }
+      }, () => {
+        tempEl.textContent = '--°';
+        cityEl.textContent = 'Localizacao negada';
+      });
+    }
+  } catch {
+    tempEl.textContent = '--°';
+    cityEl.textContent = 'Indisponivel';
+  }
+}
+
+function getCityFromTimezone(tz) {
+  if (!tz) return '';
+  const parts = tz.split('/');
+  return (parts[parts.length - 1] || '').replace(/_/g, ' ');
+}
+
+function updateDashSessionCount() {
+  const el = document.getElementById('dashSessionCount');
+  if (!el) return;
+  const convs = ConversationManager.getAll();
+  el.textContent = convs.length;
+}
+
+// Simple localStorage-based tasks
+function loadDashTasks() {
+  const countEl = document.getElementById('dashTaskCount');
+  const listEl = document.getElementById('dashTaskList');
+  if (!countEl || !listEl) return;
+
+  const tasks = JSON.parse(localStorage.getItem('senna_tasks') || '[]');
+  const pending = tasks.filter(t => !t.done);
+  countEl.textContent = pending.length;
+  listEl.innerHTML = '';
+  pending.slice(0, 3).forEach(t => {
+    const li = document.createElement('li');
+    li.textContent = t.text;
+    listEl.appendChild(li);
+  });
+}
+
+// Simple localStorage-based notes/ideas
+function loadDashNotes() {
+  const countEl = document.getElementById('dashNoteCount');
+  const listEl = document.getElementById('dashNoteList');
+  if (!countEl || !listEl) return;
+
+  const notes = JSON.parse(localStorage.getItem('senna_notes') || '[]');
+  countEl.textContent = notes.length;
+  listEl.innerHTML = '';
+  notes.slice(0, 3).forEach(n => {
+    const li = document.createElement('li');
+    li.textContent = n.text;
+    listEl.appendChild(li);
+  });
+}
+
+// Public functions to add tasks/notes from SENNA conversation
+function addSennaTask(text) {
+  const tasks = JSON.parse(localStorage.getItem('senna_tasks') || '[]');
+  tasks.unshift({ text, done: false, created: Date.now() });
+  localStorage.setItem('senna_tasks', JSON.stringify(tasks));
+  loadDashTasks();
+}
+
+function addSennaNote(text) {
+  const notes = JSON.parse(localStorage.getItem('senna_notes') || '[]');
+  notes.unshift({ text, created: Date.now() });
+  localStorage.setItem('senna_notes', JSON.stringify(notes));
+  loadDashNotes();
+}
+
 // ===== VERSION CHECK =====
 async function checkVersion() {
   const badge = document.getElementById('versionBadge');
@@ -2432,6 +2570,7 @@ function init() {
   isSessionMode = false;
   document.body.classList.remove('session-mode');
   updatePerpetualGreeting();
+  initDashboard();
   if (!particlesRunning) startParticles();
 
   renderConversationList();
