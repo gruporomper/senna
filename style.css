@@ -1262,7 +1262,6 @@ html, body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
   overflow: hidden;
   position: relative;
 }
@@ -1308,13 +1307,12 @@ html, body {
 
 /* Messages scroll area below the orb — Star Wars fade effect */
 .perpetual-messages {
-  max-width: 800px;
   width: 100%;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   gap: 10px;
-  padding: 8px 20px;
+  padding: 16px 20px;
   overflow-y: auto;
   flex: 1;
   mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.05) 8%, rgba(0,0,0,0.3) 20%, black 40%, black 100%);
@@ -2438,7 +2436,8 @@ body.state-listening .input-row {
     display: none;
   }
 
-  .chat-area {
+  .chat-area,
+  .perpetual-messages {
     padding: 10px 12px;
   }
 
@@ -2462,7 +2461,8 @@ body.state-listening .input-row {
 
 /* ===== RESPONSIVE — DESKTOP (>=769px) ===== */
 @media (min-width: 769px) {
-  .chat-area {
+  .chat-area,
+  .perpetual-messages {
     padding: 24px 48px;
   }
 
@@ -2481,7 +2481,8 @@ body.state-listening .input-row {
 
 /* ===== RESPONSIVE — LARGE DESKTOP (>=1200px) ===== */
 @media (min-width: 1200px) {
-  .chat-area {
+  .chat-area,
+  .perpetual-messages {
     padding: 24px 60px;
   }
 
