@@ -1115,12 +1115,12 @@ html, body {
   display: none;
 }
 
-/* Mini mode: helmet shrinks, texts hide, sticks to top center */
+/* Mini mode: helmet shrinks, texts hide, sits above stripes */
 .welcome-screen.mini {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  padding: 8px 20px 0;
+  padding: 10px 20px 4px;
   gap: 0;
   width: 100%;
 }

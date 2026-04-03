@@ -678,16 +678,27 @@ function loadConversation(id) {
 }
 
 // ===== WELCOME SCREEN =====
+const mainTopBar = document.querySelector('.main-area > .top-bar');
+
 function setWelcomeMini() {
   welcomeScreen.classList.remove('hidden');
   welcomeScreen.classList.add('mini');
   if (!particlesRunning) startParticles();
+  // Move helmet above the stripes bar
+  const mainArea = document.getElementById('mainArea');
+  if (mainTopBar && welcomeScreen.parentElement === chatArea) {
+    mainArea.insertBefore(welcomeScreen, mainTopBar);
+  }
 }
 
 function setWelcomeFull() {
   welcomeScreen.classList.remove('hidden', 'mini');
   if (!particlesRunning) startParticles();
   updateWelcomeMessage();
+  // Move helmet back inside chat area (as first child)
+  if (welcomeScreen.parentElement !== chatArea) {
+    chatArea.insertBefore(welcomeScreen, chatArea.firstChild);
+  }
 }
 
 function updateWelcomeScreen() {
