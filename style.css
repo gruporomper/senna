@@ -1131,6 +1131,113 @@ html, body {
 .cockpit-right {
   min-width: 200px;
   max-width: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 6px;
+}
+
+.cockpit-right .cockpit-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.closure-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.closure-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.closure-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.closure-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.closure-btn.closure-discard:hover {
+  color: #ff4d4d;
+  border-color: rgba(255, 77, 77, 0.3);
+  background: rgba(255, 77, 77, 0.08);
+}
+
+.closure-btn.closure-archive:hover {
+  color: #4da6ff;
+  border-color: rgba(77, 166, 255, 0.3);
+  background: rgba(77, 166, 255, 0.08);
+}
+
+.closure-btn.closure-memory:hover {
+  color: var(--yellow);
+  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(255, 215, 0, 0.08);
+}
+
+.closure-btn.closure-favorite:hover {
+  color: #4dff88;
+  border-color: rgba(77, 255, 136, 0.3);
+  background: rgba(77, 255, 136, 0.08);
+}
+
+.closure-btn.loading {
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.closure-btn.loading svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ===== CLOSURE TOAST ===== */
+.closure-toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--surface);
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  color: var(--text);
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.closure-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .cockpit-orb-container {
@@ -2014,6 +2121,10 @@ body.state-listening .input-row {
 
   .welcome-title {
     font-size: 18px;
+  }
+
+  .cockpit-right {
+    display: none;
   }
 }
 

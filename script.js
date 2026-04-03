@@ -238,9 +238,98 @@ const ConversationManager = {
   }
 };
 
+// ===== MEMORY BANK =====
+const MemoryBank = {
+  STORAGE_KEY: 'senna_memories',
+  MAX_MEMORIES: 200,
+
+  getAll() {
+    try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY) || '[]'); }
+    catch { return []; }
+  },
+
+  saveAll(memories) {
+    if (memories.length > this.MAX_MEMORIES) memories = memories.slice(0, this.MAX_MEMORIES);
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(memories));
+  },
+
+  add(memory) {
+    const all = this.getAll();
+    all.unshift(memory);
+    this.saveAll(all);
+    return memory;
+  },
+
+  getRecent(count = 5) {
+    return this.getAll().slice(0, count);
+  },
+
+  delete(id) {
+    this.saveAll(this.getAll().filter(m => m.id !== id));
+  }
+};
+
+async function extractMemory(conversationId) {
+  const conv = ConversationManager.get(conversationId);
+  if (!conv || !conv.messages || conv.messages.length < 2) return null;
+
+  // Limit to last 20 messages to avoid token overflow
+  const msgs = conv.messages.filter(m => m.role !== 'system').slice(-20);
+  const messagesText = msgs.map(m =>
+    `${m.role === 'user' ? 'USER' : 'SENNA'}: ${m.content}`
+  ).join('\n\n');
+
+  const extractionPrompt = [
+    { role: 'system', content: 'You are a memory extraction engine. Analyze the conversation and extract structured insights. Respond ONLY with valid JSON, no markdown, no explanation.' },
+    { role: 'user', content: `Extract from this conversation:\n\n${messagesText}\n\nReturn JSON:\n{"summary":"1-2 sentence summary in PT-BR","insights":["key insight 1"],"decisions":["decision made"],"todos":["action item"],"tags":["tag1","tag2"]}\n\nRules: summary max 2 sentences PT-BR. insights max 5. decisions max 3 (only explicit). todos max 5 (only concrete). tags 2-5 lowercase PT-BR. Empty array [] if none.` }
+  ];
+
+  const response = await fetch('/api/grok', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: GROK_MODEL, messages: extractionPrompt, temperature: 0.3, max_tokens: 500 })
+  });
+
+  if (!response.ok) throw new Error('Memory extraction failed');
+  const data = await response.json();
+  const raw = data.choices?.[0]?.message?.content || '';
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim());
+  } catch {
+    parsed = { summary: raw.substring(0, 200), insights: [], decisions: [], todos: [], tags: [] };
+  }
+
+  return MemoryBank.add({
+    id: 'mem_' + Date.now(),
+    sourceConvId: conv.id,
+    sourceTitle: conv.title,
+    summary: parsed.summary || '',
+    insights: parsed.insights || [],
+    decisions: parsed.decisions || [],
+    todos: parsed.todos || [],
+    tags: parsed.tags || [],
+    createdAt: new Date().toISOString()
+  });
+}
+
 // ===== CONVERSATION HISTORY =====
+function buildSystemPrompt() {
+  const recentMemories = MemoryBank.getRecent(5);
+  if (recentMemories.length === 0) return SYSTEM_PROMPT;
+  let ctx = '\n\n## MEMORIAS RECENTES (sessoes anteriores)\n';
+  recentMemories.forEach(m => {
+    ctx += `- [${m.sourceTitle}]: ${m.summary}`;
+    if (m.decisions.length) ctx += ` | Decisoes: ${m.decisions.join('; ')}`;
+    if (m.todos.length) ctx += ` | Pendencias: ${m.todos.join('; ')}`;
+    ctx += '\n';
+  });
+  return SYSTEM_PROMPT + ctx;
+}
+
 let conversationHistory = [
-  { role: 'system', content: SYSTEM_PROMPT }
+  { role: 'system', content: buildSystemPrompt() }
 ];
 let activeConversationId = null;
 
@@ -604,7 +693,7 @@ function newChat() {
   }
   activeConversationId = conv.id;
   ConversationManager.setActiveId(conv.id);
-  conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
+  conversationHistory = [{ role: 'system', content: buildSystemPrompt() }];
 
   // Clear chat messages (keep welcome screen)
   messagesWrap.innerHTML = '';
@@ -661,6 +750,77 @@ profileMenu.addEventListener('click', (e) => {
   }
 });
 
+// ===== SESSION CLOSURE =====
+function showClosureToast(message) {
+  let toast = document.querySelector('.closure-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.className = 'closure-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+// Descartar
+document.getElementById('closureDiscard').addEventListener('click', () => {
+  if (!activeConversationId) return;
+  ConversationManager.delete(activeConversationId);
+  newChat();
+  showClosureToast('Sessao descartada');
+});
+
+// Arquivar
+document.getElementById('closureArchive').addEventListener('click', () => {
+  if (!activeConversationId) return;
+  const all = ConversationManager.getAll(true);
+  const conv = all.find(c => c.id === activeConversationId);
+  if (conv) {
+    conv.archived = true;
+    ConversationManager.saveAll(all);
+  }
+  newChat();
+  showClosureToast('Sessao arquivada');
+});
+
+// Memoria
+document.getElementById('closureMemory').addEventListener('click', async () => {
+  if (!activeConversationId) return;
+  const btn = document.getElementById('closureMemory');
+  btn.classList.add('loading');
+  try {
+    const memory = await extractMemory(activeConversationId);
+    const all = ConversationManager.getAll(true);
+    const conv = all.find(c => c.id === activeConversationId);
+    if (conv) {
+      conv.archived = true;
+      ConversationManager.saveAll(all);
+    }
+    const insightCount = memory.insights ? memory.insights.length : 0;
+    newChat();
+    showClosureToast(`Memoria salva — ${insightCount} insight${insightCount !== 1 ? 's' : ''} extraido${insightCount !== 1 ? 's' : ''}`);
+  } catch (err) {
+    console.error('Erro ao extrair memoria:', err);
+    showClosureToast('Erro ao salvar memoria');
+  } finally {
+    btn.classList.remove('loading');
+  }
+});
+
+// Favoritar
+document.getElementById('closureFavorite').addEventListener('click', () => {
+  if (!activeConversationId) return;
+  const all = ConversationManager.getAll(true);
+  const conv = all.find(c => c.id === activeConversationId);
+  if (conv) {
+    conv.pinned = true;
+    ConversationManager.saveAll(all);
+  }
+  newChat();
+  showClosureToast('Sessao favoritada');
+});
+
 // ===== LOAD CONVERSATION =====
 function loadConversation(id) {
   const conv = ConversationManager.get(id);
@@ -668,7 +828,7 @@ function loadConversation(id) {
 
   activeConversationId = id;
   ConversationManager.setActiveId(id);
-  conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }, ...conv.messages];
+  conversationHistory = [{ role: 'system', content: buildSystemPrompt() }, ...conv.messages];
 
   // Clear chat
   messagesWrap.innerHTML = '';

@@ -250,7 +250,27 @@
             </div>
           </div>
         </div>
-        <div class="cockpit-right"></div>
+        <div class="cockpit-right">
+          <label class="cockpit-label">Encerrar sessão</label>
+          <div class="closure-actions">
+            <button class="closure-btn closure-discard" id="closureDiscard" title="Descartar sessão">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+              <span>Descartar</span>
+            </button>
+            <button class="closure-btn closure-archive" id="closureArchive" title="Arquivar sessão">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+              <span>Arquivar</span>
+            </button>
+            <button class="closure-btn closure-memory" id="closureMemory" title="Salvar memória e fechar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 014 4v1h2a2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V9a2 2 0 012-2h2V6a4 4 0 014-4z"/><line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/></svg>
+              <span>Memória</span>
+            </button>
+            <button class="closure-btn closure-favorite" id="closureFavorite" title="Favoritar e fechar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span>Favoritar</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Helmet stripes -->
