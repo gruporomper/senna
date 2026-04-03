@@ -9,19 +9,24 @@ let sennaSupabase = null;
     const config = await res.json();
     sennaSupabase = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
 
-    const ALLOWED_DOMAIN = 'romper.global';
+    const ALLOWED_EMAILS = ['marlon@romper.global'];
     const { data: { session } } = await sennaSupabase.auth.getSession();
     if (!session) {
       window.location.href = '/login.html';
       return;
     }
 
-    // Block non-allowed domains
-    const userEmail = session.user.email || '';
-    if (!userEmail.endsWith('@' + ALLOWED_DOMAIN)) {
+    // Block non-allowed emails
+    const userEmail = (session.user.email || '').toLowerCase();
+    if (!ALLOWED_EMAILS.includes(userEmail)) {
       await sennaSupabase.auth.signOut();
       window.location.href = '/login.html';
       return;
+    }
+
+    // Clean hash fragment left by Supabase OAuth redirect
+    if (window.location.hash) {
+      history.replaceState(null, '', window.location.pathname);
     }
 
     // Make user info available globally
