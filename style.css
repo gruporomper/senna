@@ -1084,7 +1084,6 @@ html, body {
   flex-direction: column;
   gap: 10px;
   z-index: 1;
-  justify-content: flex-end;
 }
 
 .chat-area::-webkit-scrollbar { width: 3px; }
