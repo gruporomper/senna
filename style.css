@@ -1099,6 +1099,121 @@ html, body {
   gap: 10px;
 }
 
+/* ===== COCKPIT ===== */
+.cockpit {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 24px;
+  background: linear-gradient(180deg, rgba(255, 215, 0, 0.04) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(255, 215, 0, 0.08);
+  flex-shrink: 0;
+}
+
+.cockpit.hidden {
+  display: none;
+}
+
+.cockpit-helmet {
+  flex-shrink: 0;
+}
+
+.cockpit-helmet-img {
+  width: 48px;
+  height: 48px;
+  filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.3));
+}
+
+.cockpit-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cockpit-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cockpit-title {
+  flex: 1;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.cockpit-title:hover {
+  border-color: rgba(255, 215, 0, 0.15);
+}
+
+.cockpit-title:focus {
+  border-color: rgba(255, 215, 0, 0.4);
+  background: rgba(255, 215, 0, 0.04);
+}
+
+.cockpit-title.locked {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.cockpit-lock {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.cockpit-lock svg {
+  width: 16px;
+  height: 16px;
+}
+
+.cockpit-lock:hover {
+  color: var(--yellow);
+  background: rgba(255, 215, 0, 0.08);
+}
+
+.cockpit-lock.active {
+  color: var(--yellow);
+}
+
+.cockpit-objective {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  color: var(--text-dim);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.cockpit-objective:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.cockpit-objective:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+}
+
 /* ===== WELCOME SCREEN ===== */
 .welcome-screen {
   flex: 1;
@@ -1115,24 +1230,9 @@ html, body {
   display: none;
 }
 
-/* Mini mode: helmet shrinks, texts hide, sits above stripes */
+/* Mini mode: welcome hidden when cockpit is active */
 .welcome-screen.mini {
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 20px 4px;
-  gap: 0;
-  width: 100%;
-}
-
-.welcome-screen.mini .welcome-title,
-.welcome-screen.mini .welcome-sub {
   display: none;
-}
-
-.welcome-screen.mini .orb-container {
-  transform: scale(0.7);
-  transform-origin: center center;
 }
 
 .welcome-title {

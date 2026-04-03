@@ -199,8 +199,8 @@ const ConversationManager = {
     if (conv) {
       conv.messages = messages.filter(m => m.role !== 'system');
       conv.updatedAt = new Date().toISOString();
-      // Auto-title from first user message
-      if (conv.title === 'Nova conversa') {
+      // Auto-title from first user message (unless locked)
+      if (!conv.titleLocked && conv.title === 'Nova conversa') {
         const firstUser = messages.find(m => m.role === 'user');
         if (firstUser) {
           conv.title = firstUser.content.substring(0, 45);
@@ -678,28 +678,89 @@ function loadConversation(id) {
 }
 
 // ===== WELCOME SCREEN =====
-const mainTopBar = document.querySelector('.main-area > .top-bar');
+const cockpit = document.getElementById('cockpit');
+const cockpitTitle = document.getElementById('cockpitTitle');
+const cockpitLock = document.getElementById('cockpitLock');
+const cockpitObjective = document.getElementById('cockpitObjective');
 
 function setWelcomeMini() {
-  welcomeScreen.classList.remove('hidden');
   welcomeScreen.classList.add('mini');
-  if (!particlesRunning) startParticles();
-  // Move helmet above the stripes bar
-  const mainArea = document.getElementById('mainArea');
-  if (mainTopBar && welcomeScreen.parentElement === chatArea) {
-    mainArea.insertBefore(welcomeScreen, mainTopBar);
+  cockpit.classList.remove('hidden');
+  // Load cockpit data from conversation
+  if (activeConversationId) {
+    const conv = ConversationManager.get(activeConversationId);
+    if (conv) {
+      cockpitTitle.value = conv.title || '';
+      cockpitObjective.value = conv.objective || '';
+      const locked = conv.titleLocked || false;
+      setCockpitLockState(locked);
+    }
   }
 }
 
 function setWelcomeFull() {
   welcomeScreen.classList.remove('hidden', 'mini');
-  if (!particlesRunning) startParticles();
-  updateWelcomeMessage();
-  // Move helmet back inside chat area (as first child)
+  cockpit.classList.add('hidden');
+  // Move welcome back to chat area if needed
   if (welcomeScreen.parentElement !== chatArea) {
     chatArea.insertBefore(welcomeScreen, chatArea.firstChild);
   }
+  if (!particlesRunning) startParticles();
+  updateWelcomeMessage();
 }
+
+function setCockpitLockState(locked) {
+  const lockOpen = cockpitLock.querySelector('.lock-open');
+  const lockClosed = cockpitLock.querySelector('.lock-closed');
+  if (locked) {
+    lockOpen.classList.add('hidden');
+    lockClosed.classList.remove('hidden');
+    cockpitLock.classList.add('active');
+    cockpitTitle.classList.add('locked');
+  } else {
+    lockOpen.classList.remove('hidden');
+    lockClosed.classList.add('hidden');
+    cockpitLock.classList.remove('active');
+    cockpitTitle.classList.remove('locked');
+  }
+}
+
+// Cockpit: save title on change
+cockpitTitle.addEventListener('change', () => {
+  if (!activeConversationId) return;
+  const all = ConversationManager.getAll();
+  const conv = all.find(c => c.id === activeConversationId);
+  if (conv) {
+    conv.title = cockpitTitle.value.trim() || 'Nova conversa';
+    conv.titleLocked = true; // User manually edited = auto-lock
+    ConversationManager.saveAll(all);
+    setCockpitLockState(true);
+    renderConversationList();
+  }
+});
+
+// Cockpit: save objective on change
+cockpitObjective.addEventListener('change', () => {
+  if (!activeConversationId) return;
+  const all = ConversationManager.getAll();
+  const conv = all.find(c => c.id === activeConversationId);
+  if (conv) {
+    conv.objective = cockpitObjective.value.trim();
+    ConversationManager.saveAll(all);
+  }
+});
+
+// Cockpit: toggle lock
+cockpitLock.addEventListener('click', () => {
+  if (!activeConversationId) return;
+  const all = ConversationManager.getAll();
+  const conv = all.find(c => c.id === activeConversationId);
+  if (conv) {
+    conv.titleLocked = !conv.titleLocked;
+    ConversationManager.saveAll(all);
+    setCockpitLockState(conv.titleLocked);
+  }
+});
 
 function updateWelcomeScreen() {
   const msgs = chatArea.querySelectorAll('.chat-message');
@@ -807,6 +868,11 @@ function addMessage(text, role, save = true) {
   if (save && activeConversationId) {
     ConversationManager.save(activeConversationId, conversationHistory);
     renderConversationList();
+    // Update cockpit title if auto-generated
+    const conv = ConversationManager.get(activeConversationId);
+    if (conv && !conv.titleLocked && cockpitTitle) {
+      cockpitTitle.value = conv.title;
+    }
   }
 }
 
