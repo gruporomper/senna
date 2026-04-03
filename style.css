@@ -1307,7 +1307,9 @@ html, body {
 
 /* Messages scroll area below the orb — Star Wars fade effect */
 .perpetual-messages {
+  max-width: 800px;
   width: 100%;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -2436,8 +2438,7 @@ body.state-listening .input-row {
     display: none;
   }
 
-  .chat-area,
-  .perpetual-messages {
+  .chat-area {
     padding: 10px 12px;
   }
 
@@ -2461,8 +2462,7 @@ body.state-listening .input-row {
 
 /* ===== RESPONSIVE — DESKTOP (>=769px) ===== */
 @media (min-width: 769px) {
-  .chat-area,
-  .perpetual-messages {
+  .chat-area {
     padding: 24px 48px;
   }
 
@@ -2481,8 +2481,7 @@ body.state-listening .input-row {
 
 /* ===== RESPONSIVE — LARGE DESKTOP (>=1200px) ===== */
 @media (min-width: 1200px) {
-  .chat-area,
-  .perpetual-messages {
+  .chat-area {
     padding: 24px 60px;
   }
 
