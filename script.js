@@ -1835,7 +1835,7 @@ async function checkVersion() {
   if (!badge || !text || !dot) return;
 
   dot.classList.add('checking');
-  text.textContent = 'Verificando...';
+  text.textContent = 'Checando telemetria...';
 
   try {
     const res = await fetch('/api/version');
@@ -1844,7 +1844,7 @@ async function checkVersion() {
 
     if (data.error) {
       dot.classList.add('error');
-      text.textContent = 'Erro ao verificar';
+      text.textContent = 'Falha na telemetria';
       return;
     }
 
@@ -1862,12 +1862,12 @@ async function checkVersion() {
     else if (diffHr < 24) timeAgo = `${diffHr}h atrás`;
     else timeAgo = `${diffDay}d atrás`;
 
-    text.textContent = `v${data.hash} · ${timeAgo}`;
-    badge.title = `Commit: ${data.message}\nHash: ${data.hash}\nData: ${commitDate.toLocaleString('pt-BR')}\nServidor iniciado: ${new Date(data.serverStart).toLocaleString('pt-BR')}`;
+    text.textContent = `box ${data.hash} · ${timeAgo}`;
+    badge.title = `Telemetria SENNA\nBox: ${data.message}\nHash: ${data.hash}\nData: ${commitDate.toLocaleString('pt-BR')}\nMotor ligado: ${new Date(data.serverStart).toLocaleString('pt-BR')}`;
   } catch (err) {
     dot.classList.remove('checking');
     dot.classList.add('error');
-    text.textContent = 'Offline';
+    text.textContent = 'Fora dos boxes';
   }
 }
 
