@@ -2,6 +2,7 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 
 // Load .env
 const envPath = path.join(__dirname, '.env');
@@ -105,6 +106,21 @@ http.createServer(async (req, res) => {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Invalid request' }));
     }
+    return;
+  }
+
+  // Webhook: GitHub auto-deploy
+  if (req.url === '/api/deploy' && req.method === 'POST') {
+    console.log('[DEPLOY] Webhook received — pulling and restarting...');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'deploying' }));
+    exec('cd /var/www/senna && git pull origin main && pm2 restart senna', (err, stdout, stderr) => {
+      if (err) {
+        console.error('[DEPLOY] Error:', stderr);
+      } else {
+        console.log('[DEPLOY] Success:', stdout);
+      }
+    });
     return;
   }
 
