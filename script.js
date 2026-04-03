@@ -1607,7 +1607,8 @@ function sendRecording() {
   removeLiveTranscript();
   stopRecording();
   if (text) {
-    processCommand(text, true);
+    textInput.value = text;
+    textInput.focus();
   }
 }
 
