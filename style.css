@@ -1465,10 +1465,9 @@ body.state-listening .input-row {
   margin: 0 auto;
 }
 
-/* Attach Buttons */
+/* Attach Button & Menu */
 .attach-wrapper {
-  display: flex;
-  gap: 6px;
+  position: relative;
   flex-shrink: 0;
 }
 
@@ -1489,12 +1488,77 @@ body.state-listening .input-row {
 .btn-attach svg {
   width: 18px;
   height: 18px;
+  transition: opacity 0.3s ease;
+}
+
+.btn-attach svg.hidden {
+  display: none;
 }
 
 .btn-attach:hover {
   background: rgba(255, 215, 0, 0.1);
   color: var(--yellow);
   border-color: var(--yellow);
+}
+
+.btn-attach.active {
+  background: rgba(255, 215, 0, 0.15);
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+.attach-menu {
+  position: absolute;
+  bottom: 50px;
+  left: 0;
+  background: var(--surface);
+  border: 1px solid rgba(255, 215, 0, 0.12);
+  border-radius: 12px;
+  padding: 6px;
+  min-width: 180px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  animation: attach-menu-in 0.15s ease;
+  z-index: 50;
+}
+
+.attach-menu.hidden {
+  display: none;
+}
+
+@keyframes attach-menu-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.attach-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.attach-menu-item svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.attach-menu-item:hover {
+  background: rgba(255, 215, 0, 0.08);
+}
+
+.attach-menu-item:hover svg {
+  color: var(--yellow);
 }
 
 .camera-file-input {

@@ -279,14 +279,57 @@ const cancelRecBtn = document.getElementById('cancelRecBtn');
 const sendRecBtn = document.getElementById('sendRecBtn');
 const canvas = document.getElementById('particles');
 const ctx = canvas.getContext('2d');
+const attachBtn = document.getElementById('attachBtn');
+const attachMenu = document.getElementById('attachMenu');
 const attachCamera = document.getElementById('attachCamera');
 const attachFile = document.getElementById('attachFile');
 const cameraInput = document.getElementById('cameraInput');
 const fileInput = document.getElementById('fileInput');
 
-// ===== ATTACH BUTTONS =====
-attachCamera.addEventListener('click', () => cameraInput.click());
-attachFile.addEventListener('click', () => fileInput.click());
+// ===== ATTACH BUTTON (alternating icon + menu) =====
+let attachIconState = 'camera'; // alternates between 'camera' and 'clip'
+
+function toggleAttachIcon() {
+  const iconCamera = attachBtn.querySelector('.icon-camera');
+  const iconClip = attachBtn.querySelector('.icon-clip');
+  if (attachIconState === 'camera') {
+    iconCamera.classList.add('hidden');
+    iconClip.classList.remove('hidden');
+    attachIconState = 'clip';
+  } else {
+    iconClip.classList.add('hidden');
+    iconCamera.classList.remove('hidden');
+    attachIconState = 'camera';
+  }
+}
+
+// Alternate icon every 3 seconds
+setInterval(toggleAttachIcon, 3000);
+
+attachBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  attachMenu.classList.toggle('hidden');
+  attachBtn.classList.toggle('active');
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.attach-wrapper')) {
+    attachMenu.classList.add('hidden');
+    attachBtn.classList.remove('active');
+  }
+});
+
+attachCamera.addEventListener('click', () => {
+  cameraInput.click();
+  attachMenu.classList.add('hidden');
+  attachBtn.classList.remove('active');
+});
+
+attachFile.addEventListener('click', () => {
+  fileInput.click();
+  attachMenu.classList.add('hidden');
+  attachBtn.classList.remove('active');
+});
 
 function handleFileAttach(file) {
   if (!file) return;
