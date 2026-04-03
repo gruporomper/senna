@@ -1084,6 +1084,7 @@ html, body {
   flex-direction: column;
   gap: 10px;
   z-index: 1;
+  justify-content: flex-end;
 }
 
 .chat-area::-webkit-scrollbar { width: 3px; }
@@ -1097,6 +1098,7 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-top: auto;
 }
 
 /* ===== COCKPIT ===== */
@@ -1507,11 +1509,12 @@ body.state-listening .input-row {
 
 .chat-message.assistant {
   align-self: flex-start;
-  background: var(--surface);
+  background: rgba(17, 17, 24, 0.85);
   border-radius: 4px 16px 16px 16px;
-  border: 1px solid rgba(255, 215, 0, 0.06);
+  border: 1px solid rgba(255, 215, 0, 0.08);
   padding-left: 20px;
   max-width: 85%;
+  backdrop-filter: blur(4px);
 }
 
 .chat-message.assistant .msg-accent {
@@ -1526,8 +1529,8 @@ body.state-listening .input-row {
 
 .chat-message.user {
   align-self: flex-end;
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.08), rgba(255, 215, 0, 0.03));
-  border: 1px solid rgba(255, 215, 0, 0.1);
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.04));
+  border: 1px solid rgba(255, 215, 0, 0.12);
   border-radius: 16px 4px 16px 16px;
 }
 
@@ -2008,7 +2011,7 @@ body.state-listening .input-row {
 /* ===== RESPONSIVE — DESKTOP (>=769px) ===== */
 @media (min-width: 769px) {
   .chat-area {
-    padding: 20px 32px;
+    padding: 24px 48px;
   }
 
   .chat-message {
@@ -2018,11 +2021,19 @@ body.state-listening .input-row {
   .chat-message.assistant {
     max-width: 80%;
   }
+
+  .controls {
+    padding: 12px 48px 16px;
+  }
 }
 
 /* ===== RESPONSIVE — LARGE DESKTOP (>=1200px) ===== */
 @media (min-width: 1200px) {
   .chat-area {
-    padding: 24px 40px;
+    padding: 24px 60px;
+  }
+
+  .controls {
+    padding: 12px 60px 16px;
   }
 }

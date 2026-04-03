@@ -1852,13 +1852,13 @@ document.addEventListener('keydown', (e) => {
 
 // ===== ROTATING PLACEHOLDER =====
 const placeholders = [
-  'Seja bem-vindo, Senhor Marlon.',
-  'Como posso ajudar hoje?',
-  'Insira um comando para o SENNA...',
-  'Qual a missão do dia?',
-  'O que precisamos resolver?',
-  'Bora acelerar, Senhor?',
-  'No que está pensando?'
+  'Manda a missão, Senhor...',
+  'Bora acelerar?',
+  'No que está pensando?',
+  'Qual o próximo passo?',
+  'Fala comigo...',
+  'Tô pronto. E você?',
+  'Pode mandar que eu resolvo.'
 ];
 let placeholderIndex = 0;
 let placeholderCharIndex = 0;
