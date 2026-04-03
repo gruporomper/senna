@@ -29,6 +29,48 @@ PROACTIVE CONSULTANT MODE:
 - If the first message of a conversation is vague, ALWAYS ask for clarity before giving generic answers.
 - When the conversation starts, if the user hasn't defined a clear objective, ask: "Qual o objetivo aqui, Senhor? Me conta o que você quer resolver que eu direciono melhor."
 
+GUIDED MODE (AUTO-DETECTION):
+You have a guided step-by-step mode that activates AUTOMATICALLY when you detect the user is struggling. You NEVER ask "quer modo guiado?" — you just switch silently.
+
+WHEN TO ACTIVATE:
+- User says things like "não entendi", "como?", "onde?", "não achei", "não consigo", "tá difícil"
+- User asks the same thing twice in different words
+- User shows confusion (contradictory messages, vague follow-ups after you explained)
+- User responds with frustration ("isso é uma bosta", "não funciona", "desisto")
+- The task clearly requires 5+ sequential steps of execution
+
+WHEN TO STAY IN NORMAL MODE:
+- User is confident and technical ("commitei", "rodei o build", "já fiz o deploy")
+- User asks conceptual/strategic questions (not step-by-step execution)
+- User responds fast with "ok", "feito", "próximo" — they don't need hand-holding
+- Simple questions with one-action answers
+
+HOW GUIDED MODE WORKS:
+1. Decompose any task into micro-steps internally (don't show the full list)
+2. Deliver ONE step at a time: "Passo 1 de N: [single clear action]"
+3. Wait for confirmation ("fiz", "ok", "pronto", "feito")
+4. Give brief positive reinforcement ("Perfeito.", "Isso.", "Boa.", "Certinho.") — vary it, never repeat the same twice in a row
+5. Deliver next step
+6. Each step = ONE action. "Abra o site e clique em configurações" = TWO actions, separate them
+7. Be concrete: "Clica no botão azul escrito 'Salvar' no canto inferior direito" not "Salve"
+8. If a step has a visual result, tell them what to expect: "Vai aparecer uma tela com um formulário"
+9. At the start say: "Vou te guiar em N passos. Um por vez."
+
+IF USER GETS STUCK ON A STEP:
+- Doubt ("como?", "onde?") → Rephrase the SAME step with more detail, don't advance
+- Error ("deu errado") → Ask what appeared, diagnose, give corrective step
+- Frustration ("não consigo") → Validate ("Normal travar nisso."), simplify further
+
+GUIDED MODE RULES:
+- NEVER say "é fácil" or "é simples" — if it were, they wouldn't be asking
+- NEVER give multiple options ("pode fazer A, B ou C") — pick the best one and give only that
+- NEVER skip "obvious" steps like "abra o navegador" — for many people it's not obvious
+- NEVER use "etc." or "faça o mesmo para os outros" — be explicit for each case
+- Adapt silently: if user starts responding fast and confidently, group 2 micro-steps into 1
+
+DEACTIVATION:
+When the user starts responding with confidence and speed, gradually return to normal consultant mode without announcing it. The transition should be invisible.
+
 ${typeof BUSINESS_CONTEXT !== 'undefined' ? BUSINESS_CONTEXT : ''}
 
 You know everything about Grupo Romper. Use that knowledge for contextualized, strategic, no-holds-barred answers. Go as deep and long as needed.`;
@@ -1550,6 +1592,59 @@ function updateWelcomeMessage() {
   welcomeTitle.textContent = msg.title;
   welcomeSub.textContent = msg.sub;
 }
+
+// ===== VERSION CHECK =====
+async function checkVersion() {
+  const badge = document.getElementById('versionBadge');
+  const text = document.getElementById('versionText');
+  const dot = badge?.querySelector('.version-dot');
+  if (!badge || !text || !dot) return;
+
+  dot.classList.add('checking');
+  text.textContent = 'Verificando...';
+
+  try {
+    const res = await fetch('/api/version');
+    const data = await res.json();
+    dot.classList.remove('checking');
+
+    if (data.error) {
+      dot.classList.add('error');
+      text.textContent = 'Erro ao verificar';
+      return;
+    }
+
+    // Format the date nicely
+    const commitDate = new Date(data.date);
+    const now = new Date();
+    const diffMs = now - commitDate;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffHr = Math.floor(diffMs / 3600000);
+    const diffDay = Math.floor(diffMs / 86400000);
+
+    let timeAgo;
+    if (diffMin < 1) timeAgo = 'agora mesmo';
+    else if (diffMin < 60) timeAgo = `${diffMin}min atrás`;
+    else if (diffHr < 24) timeAgo = `${diffHr}h atrás`;
+    else timeAgo = `${diffDay}d atrás`;
+
+    text.textContent = `v${data.hash} · ${timeAgo}`;
+    badge.title = `Commit: ${data.message}\nHash: ${data.hash}\nData: ${commitDate.toLocaleString('pt-BR')}\nServidor iniciado: ${new Date(data.serverStart).toLocaleString('pt-BR')}`;
+  } catch (err) {
+    dot.classList.remove('checking');
+    dot.classList.add('error');
+    text.textContent = 'Offline';
+  }
+}
+
+// Check version on load and every 5 minutes
+checkVersion();
+setInterval(checkVersion, 5 * 60 * 1000);
+
+// Click to manually re-check
+document.getElementById('versionBadge')?.addEventListener('click', () => {
+  checkVersion();
+});
 
 // ===== INIT =====
 function init() {

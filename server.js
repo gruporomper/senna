@@ -18,6 +18,7 @@ const GROK_API_KEY = process.env.GROK_API_KEY;
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_VOICE_ID = process.env.ELEVENLABS_VOICE_ID;
 const DIR = __dirname;
+const SERVER_START_TIME = new Date().toISOString();
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -120,6 +121,26 @@ http.createServer(async (req, res) => {
       } else {
         console.log('[DEPLOY] Success:', stdout);
       }
+    });
+    return;
+  }
+
+  // API Version: returns git commit info + server start time
+  if (req.url === '/api/version' && req.method === 'GET') {
+    exec('git log -1 --format="%h|%ci|%s"', { cwd: DIR }, (err, stdout) => {
+      if (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to get version' }));
+        return;
+      }
+      const parts = stdout.trim().split('|');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        hash: parts[0] || '???',
+        date: parts[1] || '',
+        message: parts[2] || '',
+        serverStart: SERVER_START_TIME
+      }));
     });
     return;
   }

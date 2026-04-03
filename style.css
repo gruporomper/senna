@@ -665,6 +665,58 @@ html, body {
   border-top: 1px solid rgba(255, 215, 0, 0.06);
 }
 
+/* Version Badge */
+.version-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: rgba(255, 215, 0, 0.04);
+  border: 1px solid rgba(255, 215, 0, 0.08);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.version-badge:hover {
+  background: rgba(255, 215, 0, 0.08);
+  border-color: rgba(255, 215, 0, 0.15);
+}
+.version-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+.version-dot.checking {
+  background: var(--yellow);
+  animation: pulse-dot 0.6s ease-in-out infinite;
+}
+.version-dot.error {
+  background: #e74c3c;
+  animation: none;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.version-text {
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar.collapsed .version-badge {
+  justify-content: center;
+  padding: 6px;
+}
+.sidebar.collapsed .version-text {
+  display: none;
+}
+
 /* ===== SEARCH OVERLAY ===== */
 .search-overlay {
   position: fixed;
