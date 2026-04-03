@@ -279,6 +279,8 @@ const cancelRecBtn = document.getElementById('cancelRecBtn');
 const sendRecBtn = document.getElementById('sendRecBtn');
 const canvas = document.getElementById('particles');
 const ctx = canvas.getContext('2d');
+const cockpitCanvas = document.getElementById('cockpitParticles');
+const cockpitCtx = cockpitCanvas.getContext('2d');
 const attachBtn = document.getElementById('attachBtn');
 const attachMenu = document.getElementById('attachMenu');
 const attachCamera = document.getElementById('attachCamera');
@@ -777,6 +779,8 @@ let particles = [];
 function initParticles() {
   canvas.width = 300;
   canvas.height = 220;
+  cockpitCanvas.width = 300;
+  cockpitCanvas.height = 220;
   particles = [];
   for (let i = 0; i < 40; i++) {
     particles.push({
@@ -794,7 +798,12 @@ function initParticles() {
 function animateParticles() {
   if (!particlesRunning) return;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Render on both canvases (active one will be visible)
+  const targets = [
+    { c: canvas, x: ctx },
+    { c: cockpitCanvas, x: cockpitCtx }
+  ];
+
   const speed = currentState === 'idle' ? 1 : currentState === 'thinking' ? 3 : 2;
 
   particles.forEach(p => {
@@ -802,30 +811,36 @@ function animateParticles() {
     p.y += p.vy * speed;
     if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
     if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fillStyle = p.color;
-    ctx.globalAlpha = p.opacity;
-    ctx.fill();
   });
 
-  ctx.globalAlpha = 0.05;
-  ctx.strokeStyle = '#FFD700';
-  ctx.lineWidth = 0.5;
-  for (let i = 0; i < particles.length; i++) {
-    for (let j = i + 1; j < particles.length; j++) {
-      const dx = particles[i].x - particles[j].x;
-      const dy = particles[i].y - particles[j].y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 80) {
-        ctx.beginPath();
-        ctx.moveTo(particles[i].x, particles[i].y);
-        ctx.lineTo(particles[j].x, particles[j].y);
-        ctx.stroke();
+  targets.forEach(({ c, x }) => {
+    x.clearRect(0, 0, c.width, c.height);
+    particles.forEach(p => {
+      x.beginPath();
+      x.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      x.fillStyle = p.color;
+      x.globalAlpha = p.opacity;
+      x.fill();
+    });
+
+    x.globalAlpha = 0.05;
+    x.strokeStyle = '#FFD700';
+    x.lineWidth = 0.5;
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 80) {
+          x.beginPath();
+          x.moveTo(particles[i].x, particles[i].y);
+          x.lineTo(particles[j].x, particles[j].y);
+          x.stroke();
+        }
       }
     }
-  }
-  ctx.globalAlpha = 1;
+    x.globalAlpha = 1;
+  });
 
   requestAnimationFrame(animateParticles);
 }

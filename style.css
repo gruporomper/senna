@@ -1102,43 +1102,70 @@ html, body {
 /* ===== COCKPIT ===== */
 .cockpit {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 10px 24px 6px;
+  padding: 12px 24px;
   background: linear-gradient(180deg, rgba(255, 215, 0, 0.04) 0%, transparent 100%);
   border-bottom: 1px solid rgba(255, 215, 0, 0.08);
   flex-shrink: 0;
-  gap: 8px;
 }
 
 .cockpit.hidden {
   display: none;
 }
 
-.cockpit-helmet {
-  flex-shrink: 0;
-}
-
-.cockpit-helmet-img {
-  width: 120px;
-  height: auto;
-  filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.4)) drop-shadow(0 0 60px rgba(255, 215, 0, 0.15));
-}
-
-.cockpit-info {
+.cockpit-left {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  max-width: 500px;
+  gap: 6px;
+  min-width: 200px;
+  max-width: 260px;
+}
+
+.cockpit-center {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.cockpit-right {
+  min-width: 200px;
+  max-width: 260px;
+}
+
+.cockpit-orb-container {
+  position: relative;
+}
+
+.cockpit-particles-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 320px;
+  height: 230px;
+  pointer-events: none;
+}
+
+.cockpit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cockpit-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  padding-left: 8px;
 }
 
 .cockpit-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 4px;
 }
 
 .cockpit-title {
@@ -1148,12 +1175,12 @@ html, body {
   border-radius: 6px;
   padding: 4px 8px;
   font-family: 'Inter', sans-serif;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text);
-  text-align: center;
   outline: none;
   transition: border-color 0.2s;
+  min-width: 0;
 }
 
 .cockpit-title:hover {
@@ -1180,11 +1207,12 @@ html, body {
   transition: color 0.2s, background 0.2s;
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .cockpit-lock svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .cockpit-lock:hover {
@@ -1200,11 +1228,10 @@ html, body {
   background: none;
   border: 1px solid transparent;
   border-radius: 6px;
-  padding: 3px 8px;
+  padding: 4px 8px;
   font-family: 'Inter', sans-serif;
   font-size: 12px;
   color: var(--text-dim);
-  text-align: center;
   width: 100%;
   outline: none;
   transition: border-color 0.2s;
