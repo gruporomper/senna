@@ -1355,6 +1355,47 @@ body.session-mode .perpetual-home {
   height: 14px;
 }
 
+/* ===== SESSION PRE-CHAT HERO ===== */
+.session-prechat-hero {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 1;
+}
+
+body.session-prechat .session-prechat-hero {
+  display: flex;
+}
+
+/* In prechat, hide the chat area and cockpit stripe */
+body.session-prechat .chat-area {
+  display: none !important;
+}
+body.session-prechat .main-stripe {
+  display: none !important;
+}
+
+.session-prechat-orb {
+  transform: scale(1.1);
+  transition: transform 0.4s ease;
+}
+
+.session-prechat-text {
+  font-size: 14px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  text-align: center;
+  animation: fadeIn 0.5s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ===== SESSION CHAT AREA ===== */
 .chat-area {
   flex: 1;

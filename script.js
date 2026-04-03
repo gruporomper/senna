@@ -806,7 +806,7 @@ function openSession(carryMessages = false) {
   messagesWrap.innerHTML = '';
 
   if (carryMessages) {
-    // Migrate perpetual messages to session — create conversation now since we have content
+    // Migrate perpetual messages to session — go straight to active mode
     const msgs = perpetualHistory.filter(m => m.role !== 'system');
     if (msgs.length > 0) {
       const conv = ConversationManager.create();
@@ -817,23 +817,34 @@ function openSession(carryMessages = false) {
         addMessage(m.content, m.role, false);
       });
       ConversationManager.save(activeConversationId, conversationHistory);
+      activateSessionCockpit();
+      renderConversationList();
+      textInput.focus();
+      return;
     }
   }
 
-  // Show cockpit
-  cockpit.classList.remove('hidden');
+  // Pre-chat phase: big helmet centered, no cockpit yet
+  document.body.classList.add('session-prechat');
+  cockpit.classList.add('hidden');
   cockpitTitle.value = '';
   cockpitObjective.value = '';
   setCockpitLockState(false);
 
   renderConversationList();
   textInput.focus();
-  showClosureToast('Sessao aberta');
+}
+
+function activateSessionCockpit() {
+  // Transition from pre-chat to active session
+  document.body.classList.remove('session-prechat');
+  cockpit.classList.remove('hidden');
 }
 
 function closeSession() {
   isSessionMode = false;
   document.body.classList.remove('session-mode');
+  document.body.classList.remove('session-prechat');
   activeConversationId = null;
   cockpit.classList.add('hidden');
 
@@ -1314,6 +1325,7 @@ async function processCommand(text, fromVoice = false) {
       const conv = ConversationManager.create();
       activeConversationId = conv.id;
       ConversationManager.setActiveId(conv.id);
+      activateSessionCockpit();
       renderConversationList();
     }
 
