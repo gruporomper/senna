@@ -601,11 +601,10 @@ function newChat() {
   const messages = chatArea.querySelectorAll('.chat-message');
   messages.forEach(m => m.remove());
 
-  // SENNA asks for the objective proactively
-  const greeting = SENNA_GREETINGS[Math.floor(Math.random() * SENNA_GREETINGS.length)];
-  conversationHistory.push({ role: 'assistant', content: greeting });
-  welcomeScreen.classList.add('hidden');
-  addMessage(greeting, 'assistant', true);
+  // Show welcome screen with greeting
+  welcomeScreen.classList.remove('hidden');
+  if (!particlesRunning) startParticles();
+  updateWelcomeMessage();
 
   renderConversationList();
   closeSidebar();
