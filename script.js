@@ -1381,8 +1381,8 @@ async function processCommand(text, fromVoice = false) {
   }
 }
 
-// ===== ELEVENLABS TTS =====
-// API keys are server-side only
+// ===== PIPER TTS (self-hosted) =====
+// Self-hosted Piper TTS at VPS 72.60.123.52:8090
 let currentAudio = null;
 let speakAudioCtx = null;
 let speakAnalyser = null;
@@ -1421,25 +1421,16 @@ async function speak(text, onEnd) {
   synthesis.cancel();
 
   try {
-    const response = await fetch('/api/tts', {
+    const response = await fetch('http://72.60.123.52:8090/tts', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        text: text,
-        model_id: 'eleven_multilingual_v2',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.3,
-          use_speaker_boost: true
-        }
-      })
+      body: JSON.stringify({ text: text })
     });
 
     if (!response.ok) {
-      console.error('ElevenLabs error:', response.status);
+      console.error('Piper TTS error:', response.status);
       speakFallback(text, onEnd);
       return;
     }
@@ -1478,7 +1469,7 @@ async function speak(text, onEnd) {
       if (speakAnalyser) animateSpeakingHelmet();
     }).catch(() => {});
   } catch (error) {
-    console.error('ElevenLabs fetch error:', error);
+    console.error('Piper TTS fetch error:', error);
     speakFallback(text, onEnd);
   }
 }
