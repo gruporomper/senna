@@ -1452,101 +1452,36 @@ body.state-listening .input-row {
   width: 100%;
 }
 
-/* Attach Button & Menu */
+/* Attach Buttons */
 .attach-wrapper {
-  position: relative;
+  display: flex;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .btn-attach {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  border: none;
+  border: 1px solid rgba(255, 215, 0, 0.1);
   background: var(--surface);
-  color: var(--text-secondary);
+  color: var(--text-dim);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
-  border: 1px solid rgba(255, 215, 0, 0.1);
 }
 
 .btn-attach svg {
-  width: 20px;
-  height: 20px;
-  transition: transform 0.2s;
+  width: 18px;
+  height: 18px;
 }
 
 .btn-attach:hover {
   background: rgba(255, 215, 0, 0.1);
   color: var(--yellow);
   border-color: var(--yellow);
-}
-
-.btn-attach.active {
-  background: rgba(255, 215, 0, 0.15);
-  color: var(--yellow);
-  border-color: var(--yellow);
-}
-
-.btn-attach.active svg {
-  transform: rotate(45deg);
-}
-
-.attach-menu {
-  position: absolute;
-  bottom: 54px;
-  left: 0;
-  background: var(--surface);
-  border: 1px solid rgba(255, 215, 0, 0.12);
-  border-radius: 12px;
-  padding: 6px;
-  min-width: 180px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  animation: attach-menu-in 0.15s ease;
-  z-index: 50;
-}
-
-.attach-menu.hidden {
-  display: none;
-}
-
-@keyframes attach-menu-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.attach-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  font-family: 'Inter', sans-serif;
-  cursor: pointer;
-  border-radius: 8px;
-  transition: background 0.15s;
-}
-
-.attach-menu-item svg {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-
-.attach-menu-item:hover {
-  background: rgba(255, 215, 0, 0.08);
-}
-
-.attach-menu-item:hover svg {
-  color: var(--yellow);
 }
 
 .camera-file-input {

@@ -207,38 +207,14 @@ const cancelRecBtn = document.getElementById('cancelRecBtn');
 const sendRecBtn = document.getElementById('sendRecBtn');
 const canvas = document.getElementById('particles');
 const ctx = canvas.getContext('2d');
-const attachBtn = document.getElementById('attachBtn');
-const attachMenu = document.getElementById('attachMenu');
 const attachCamera = document.getElementById('attachCamera');
 const attachFile = document.getElementById('attachFile');
 const cameraInput = document.getElementById('cameraInput');
 const fileInput = document.getElementById('fileInput');
 
-// ===== ATTACH MENU =====
-attachBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  attachMenu.classList.toggle('hidden');
-  attachBtn.classList.toggle('active');
-});
-
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('.attach-wrapper')) {
-    attachMenu.classList.add('hidden');
-    attachBtn.classList.remove('active');
-  }
-});
-
-attachCamera.addEventListener('click', () => {
-  cameraInput.click();
-  attachMenu.classList.add('hidden');
-  attachBtn.classList.remove('active');
-});
-
-attachFile.addEventListener('click', () => {
-  fileInput.click();
-  attachMenu.classList.add('hidden');
-  attachBtn.classList.remove('active');
-});
+// ===== ATTACH BUTTONS =====
+attachCamera.addEventListener('click', () => cameraInput.click());
+attachFile.addEventListener('click', () => fileInput.click());
 
 function handleFileAttach(file) {
   if (!file) return;
