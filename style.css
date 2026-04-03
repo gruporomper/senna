@@ -1307,14 +1307,12 @@ html, body {
 
 /* Messages scroll area below the orb — Star Wars fade effect */
 .perpetual-messages {
-  max-width: 800px;
   width: 100%;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   gap: 10px;
-  padding: 16px 20px;
+  padding: 16px 16px;
   overflow-y: auto;
   flex: 1;
   mask-image: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.05) 8%, rgba(0,0,0,0.3) 20%, black 40%, black 100%);
@@ -2446,6 +2444,10 @@ body.state-listening .input-row {
     padding: 8px 12px 10px;
   }
 
+  .perpetual-messages {
+    padding: 10px 12px;
+  }
+
   .orb {
     width: 100px;
     height: 100px;
@@ -2477,6 +2479,10 @@ body.state-listening .input-row {
   .controls {
     padding: 12px 48px 16px;
   }
+
+  .perpetual-messages {
+    padding: 16px 48px;
+  }
 }
 
 /* ===== RESPONSIVE — LARGE DESKTOP (>=1200px) ===== */
@@ -2487,5 +2493,9 @@ body.state-listening .input-row {
 
   .controls {
     padding: 12px 60px 16px;
+  }
+
+  .perpetual-messages {
+    padding: 16px 60px;
   }
 }
