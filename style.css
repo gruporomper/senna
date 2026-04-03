@@ -1270,7 +1270,7 @@ html, body {
 /* Orb fixed in upper area */
 .perpetual-orb {
   flex-shrink: 0;
-  margin-top: 8vh;
+  margin-top: 15vh;
   margin-bottom: 8px;
   z-index: 2;
   position: relative;
