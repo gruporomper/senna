@@ -1098,11 +1098,8 @@ html, body {
 .s-blue { background: linear-gradient(90deg, var(--blue), var(--blue-light), var(--blue)); }
 .s-yellow { background: linear-gradient(90deg, var(--yellow-dark), var(--yellow), var(--yellow-light)); }
 
-/* Main stripe: hidden in perpetual, visible in session below cockpit */
+/* Main stripe: always visible */
 .main-stripe {
-  display: none;
-}
-body.session-mode .main-stripe {
   display: flex;
 }
 
