@@ -1029,7 +1029,36 @@ html, body {
   font-weight: 500;
 }
 
-.home-btn,
+/* Sidebar Home Button */
+.sidebar-home-btn {
+  margin: 4px 12px 0;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.sidebar-home-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--yellow);
+}
+
+.sidebar-home-btn:hover {
+  background: rgba(255, 215, 0, 0.06);
+  border-color: rgba(255, 215, 0, 0.3);
+}
+
 .open-session-btn {
   display: flex;
   align-items: center;
@@ -1046,14 +1075,12 @@ html, body {
   white-space: nowrap;
 }
 
-.home-btn svg,
 .open-session-btn svg {
   width: 14px;
   height: 14px;
   color: var(--yellow);
 }
 
-.home-btn:hover,
 .open-session-btn:hover {
   color: var(--yellow);
   border-color: rgba(255, 215, 0, 0.45);
@@ -2242,7 +2269,6 @@ body.state-listening .input-row {
     display: none;
   }
 
-  .home-btn,
   .open-session-btn {
     padding: 6px 8px;
   }
