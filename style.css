@@ -1449,8 +1449,7 @@ body.state-listening .input-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: 800px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 /* Attach Button & Menu */
