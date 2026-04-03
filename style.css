@@ -1679,6 +1679,15 @@ body.state-listening .input-row {
   justify-content: flex-end;
 }
 
+.msg-actions-user .msg-action-btn {
+  color: rgba(255, 215, 0, 0.35);
+}
+
+.msg-actions-user .msg-action-btn:hover {
+  color: var(--yellow);
+  background: rgba(255, 215, 0, 0.1);
+}
+
 .msg-edit-save { color: var(--green-light); }
 .msg-edit-cancel { color: var(--text-dim); }
 
