@@ -280,7 +280,7 @@ const sendRecBtn = document.getElementById('sendRecBtn');
 const canvas = document.getElementById('particles');
 const ctx = canvas.getContext('2d');
 const cockpitCanvas = document.getElementById('cockpitParticles');
-const cockpitCtx = cockpitCanvas.getContext('2d');
+const cockpitCtx = cockpitCanvas ? cockpitCanvas.getContext('2d') : null;
 const attachBtn = document.getElementById('attachBtn');
 const attachMenu = document.getElementById('attachMenu');
 const attachCamera = document.getElementById('attachCamera');
@@ -785,8 +785,7 @@ let particles = [];
 function initParticles() {
   canvas.width = 300;
   canvas.height = 220;
-  cockpitCanvas.width = 300;
-  cockpitCanvas.height = 220;
+  if (cockpitCanvas) { cockpitCanvas.width = 300; cockpitCanvas.height = 220; }
   particles = [];
   for (let i = 0; i < 40; i++) {
     particles.push({
@@ -805,10 +804,8 @@ function animateParticles() {
   if (!particlesRunning) return;
 
   // Render on both canvases (active one will be visible)
-  const targets = [
-    { c: canvas, x: ctx },
-    { c: cockpitCanvas, x: cockpitCtx }
-  ];
+  const targets = [{ c: canvas, x: ctx }];
+  if (cockpitCanvas && cockpitCtx) targets.push({ c: cockpitCanvas, x: cockpitCtx });
 
   const speed = currentState === 'idle' ? 1 : currentState === 'thinking' ? 3 : 2;
 
