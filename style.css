@@ -1130,23 +1130,9 @@ html, body {
 }
 
 .welcome-screen.mini .orb-container {
-  transform: scale(0.5);
+  transform: scale(0.7);
   transform-origin: center center;
   margin: 0 auto;
-}
-
-.welcome-screen.mini #particles {
-  width: 160px;
-  height: 115px;
-}
-
-.welcome-screen.mini .orb {
-  width: 60px;
-  height: 60px;
-}
-
-.welcome-screen.mini .helmet-svg {
-  width: 60px;
 }
 
 .welcome-title {
