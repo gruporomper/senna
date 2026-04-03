@@ -1657,9 +1657,10 @@ body.state-listening .input-row {
   background: var(--surface);
   border: 1px solid rgba(0, 155, 58, 0.25);
   border-radius: 28px;
-  padding: 8px 10px 8px 16px;
+  padding: 10px 12px 10px 16px;
   gap: 8px;
   box-shadow: 0 0 0 3px rgba(0, 155, 58, 0.08);
+  overflow: hidden;
 }
 
 .recording-row.hidden,
@@ -1670,12 +1671,12 @@ body.state-listening .input-row {
 
 .waveform-canvas {
   flex: 1;
-  height: 40px;
+  height: 30px;
 }
 
 .btn-rec {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
@@ -1686,7 +1687,7 @@ body.state-listening .input-row {
   flex-shrink: 0;
 }
 
-.btn-rec svg { width: 16px; height: 16px; }
+.btn-rec svg { width: 14px; height: 14px; }
 
 .btn-rec-cancel {
   background: rgba(255, 80, 80, 0.12);
