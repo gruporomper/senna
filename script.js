@@ -779,7 +779,7 @@ function addPerpetualMessage(text, role) {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 010 7.07"/><path d="M19.07 4.93a10 10 0 010 14.14"/></svg>
       </button>
     </div>`;
-    msg.innerHTML = `<div class="msg-content">${formatMessage(text, role)}</div>${actions}`;
+    msg.innerHTML = `<div class="msg-accent"></div><div class="msg-content">${formatMessage(text, role)}</div>${actions}`;
   } else {
     actions = `<div class="msg-actions msg-actions-user">
       <button class="msg-action-btn" data-action="copy" title="Copiar">
