@@ -267,6 +267,7 @@ const conversationListEl = document.getElementById('conversationList');
 const orb = document.getElementById('orb');
 const orbStatus = document.getElementById('orbStatus');
 const chatArea = document.getElementById('chatArea');
+const messagesWrap = document.getElementById('messagesWrap');
 const welcomeScreen = document.getElementById('welcomeScreen');
 const textInput = document.getElementById('textInput');
 const sendBtn = document.getElementById('sendBtn');
@@ -344,7 +345,7 @@ function handleFileAttach(file) {
     } else {
       imgPreview.innerHTML = `<div class="msg-content"><span class="msg-file">📎 ${file.name}</span></div>`;
     }
-    chatArea.appendChild(imgPreview);
+    messagesWrap.appendChild(imgPreview);
     chatArea.scrollTop = chatArea.scrollHeight;
     setWelcomeMini();
     textInput.placeholder = 'Pergunte sobre o arquivo...';
@@ -606,8 +607,7 @@ function newChat() {
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
 
   // Clear chat messages (keep welcome screen)
-  const messages = chatArea.querySelectorAll('.chat-message');
-  messages.forEach(m => m.remove());
+  messagesWrap.innerHTML = '';
 
   // Show welcome screen full (with greeting)
   setWelcomeFull();
@@ -671,8 +671,7 @@ function loadConversation(id) {
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }, ...conv.messages];
 
   // Clear chat
-  const messages = chatArea.querySelectorAll('.chat-message');
-  messages.forEach(m => m.remove());
+  messagesWrap.innerHTML = '';
 
   // Re-render messages
   conv.messages.forEach(m => {
@@ -880,7 +879,7 @@ function addMessage(text, role, save = true) {
   msg.className = `chat-message ${role}`;
   const accent = role === 'assistant' ? '<div class="msg-accent"></div>' : '';
   msg.innerHTML = `${accent}<div class="msg-content">${formatMessage(text, role)}</div>`;
-  chatArea.appendChild(msg);
+  messagesWrap.appendChild(msg);
   chatArea.scrollTop = chatArea.scrollHeight;
 
   if (save && activeConversationId) {
@@ -1203,7 +1202,7 @@ function updateLiveTranscript(text) {
     bubble = document.createElement('div');
     bubble.id = 'liveTranscript';
     bubble.className = 'chat-message user live-transcript';
-    chatArea.appendChild(bubble);
+    messagesWrap.appendChild(bubble);
     setWelcomeMini();
   }
   bubble.textContent = text;
