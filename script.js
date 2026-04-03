@@ -335,7 +335,7 @@ let perpetualHistory = [
   { role: 'system', content: buildSystemPrompt() }
 ];
 let activeConversationId = null;
-let isSessionMode = false;
+let appMode = 'home'; // 'home' | 'session-prechat' | 'session-active'
 
 // ===== STATE =====
 let currentState = 'idle';
@@ -365,6 +365,8 @@ const perpetualHome = document.getElementById('perpetualHome');
 const perpetualChatArea = document.getElementById('perpetualChatArea');
 const perpetualMessages = document.getElementById('perpetualMessages');
 const perpetualGreeting = document.getElementById('perpetualGreeting');
+const sessionPrechatHero = document.getElementById('sessionPrechatHero');
+const mainStripe = document.getElementById('mainStripe');
 const textInput = document.getElementById('textInput');
 const sendBtn = document.getElementById('sendBtn');
 const micBtn = document.getElementById('micBtn');
@@ -692,20 +694,12 @@ const SENNA_GREETINGS = [
 ];
 
 function newChat() {
-  if (isSessionMode) {
-    // From session mode → open new session
-    const conv = ConversationManager.create();
-    activeConversationId = conv.id;
-    ConversationManager.setActiveId(conv.id);
-    conversationHistory = [{ role: 'system', content: buildSystemPrompt() }];
-    messagesWrap.innerHTML = '';
-    cockpitTitle.value = '';
-    cockpitObjective.value = '';
-    setCockpitLockState(false);
-    renderConversationList();
+  if (appMode !== 'home') {
+    // From session → open fresh session
+    openSession(false);
   } else {
-    // Go to perpetual home
-    closeSession();
+    // Already home, just open session
+    openSession(false);
   }
   closeSidebar();
   textInput.focus();
@@ -713,7 +707,7 @@ function newChat() {
 
 newChatBtn.addEventListener('click', () => {
   // "Nova sessao" from sidebar always opens session mode
-  if (!isSessionMode) {
+  if (appMode === 'home') {
     openSession(false);
   } else {
     newChat();
@@ -797,16 +791,14 @@ function addPerpetualMessage(text, role) {
 }
 
 function openSession(carryMessages = false) {
-  isSessionMode = true;
-  document.body.classList.add('session-mode');
-
-  // Defer conversation creation until first message
   activeConversationId = null;
   conversationHistory = [{ role: 'system', content: buildSystemPrompt() }];
   messagesWrap.innerHTML = '';
+  cockpitTitle.value = '';
+  cockpitObjective.value = '';
+  setCockpitLockState(false);
 
   if (carryMessages) {
-    // Migrate perpetual messages to session — go straight to active mode
     const msgs = perpetualHistory.filter(m => m.role !== 'system');
     if (msgs.length > 0) {
       const conv = ConversationManager.create();
@@ -817,36 +809,20 @@ function openSession(carryMessages = false) {
         addMessage(m.content, m.role, false);
       });
       ConversationManager.save(activeConversationId, conversationHistory);
-      activateSessionCockpit();
+      setAppMode('session-active');
       renderConversationList();
       textInput.focus();
       return;
     }
   }
 
-  // Pre-chat phase: big helmet centered, no cockpit yet
-  document.body.classList.add('session-prechat');
-  cockpit.classList.add('hidden');
-  cockpitTitle.value = '';
-  cockpitObjective.value = '';
-  setCockpitLockState(false);
-
+  setAppMode('session-prechat');
   renderConversationList();
   textInput.focus();
 }
 
-function activateSessionCockpit() {
-  // Transition from pre-chat to active session
-  document.body.classList.remove('session-prechat');
-  cockpit.classList.remove('hidden');
-}
-
 function closeSession() {
-  isSessionMode = false;
-  document.body.classList.remove('session-mode');
-  document.body.classList.remove('session-prechat');
   activeConversationId = null;
-  cockpit.classList.add('hidden');
 
   // Reset perpetual
   perpetualHistory = [{ role: 'system', content: buildSystemPrompt() }];
@@ -860,13 +836,14 @@ function closeSession() {
   updateDashSessionCount();
   loadDashTasks();
   loadDashNotes();
+  setAppMode('home');
   renderConversationList();
   textInput.focus();
 }
 
 // Home button — return to perpetual mode
 document.getElementById('homeBtn').addEventListener('click', () => {
-  if (isSessionMode) closeSession();
+  if (appMode !== 'home') closeSession();
 });
 
 // ===== SESSION CLOSURE =====
@@ -945,10 +922,6 @@ function loadConversation(id) {
   const conv = ConversationManager.get(id);
   if (!conv) return;
 
-  // Enter session mode
-  isSessionMode = true;
-  document.body.classList.add('session-mode');
-
   activeConversationId = id;
   ConversationManager.setActiveId(id);
   conversationHistory = [{ role: 'system', content: buildSystemPrompt() }, ...conv.messages];
@@ -963,36 +936,60 @@ function loadConversation(id) {
     }
   });
 
-  // Show cockpit
+  // Enter session active mode
+  setAppMode('session-active');
+  cockpitTitle.value = '';
+  cockpitObjective.value = '';
+  setCockpitLockState(false);
   setWelcomeMini();
   renderConversationList();
 }
 
-// ===== WELCOME SCREEN =====
+// ===== MODE CONTROL =====
 const cockpit = document.getElementById('cockpit');
 const cockpitTitle = document.getElementById('cockpitTitle');
 const cockpitLock = document.getElementById('cockpitLock');
 const cockpitObjective = document.getElementById('cockpitObjective');
 
+function setAppMode(mode) {
+  appMode = mode;
+
+  // Explicit visibility control — single source of truth
+  if (mode === 'home') {
+    perpetualHome.style.display = '';
+    cockpit.style.display = 'none';
+    chatArea.style.display = 'none';
+    if (sessionPrechatHero) sessionPrechatHero.style.display = 'none';
+    if (mainStripe) mainStripe.style.display = '';
+  } else if (mode === 'session-prechat') {
+    perpetualHome.style.display = 'none';
+    cockpit.style.display = 'none';
+    chatArea.style.display = 'none';
+    if (sessionPrechatHero) sessionPrechatHero.style.display = 'flex';
+    if (mainStripe) mainStripe.style.display = 'none';
+  } else if (mode === 'session-active') {
+    perpetualHome.style.display = 'none';
+    cockpit.style.display = '';
+    chatArea.style.display = 'flex';
+    if (sessionPrechatHero) sessionPrechatHero.style.display = 'none';
+    if (mainStripe) mainStripe.style.display = '';
+  }
+}
+
 function setWelcomeMini() {
-  // In session mode, show cockpit — but NOT during prechat phase
-  if (isSessionMode && !document.body.classList.contains('session-prechat')) {
-    cockpit.classList.remove('hidden');
+  // Only populate cockpit data — never toggle visibility
+  if (appMode === 'session-active' && activeConversationId) {
     if (!particlesRunning) startParticles();
-    if (activeConversationId) {
-      const conv = ConversationManager.get(activeConversationId);
-      if (conv) {
-        cockpitTitle.value = (conv.title && conv.title !== 'Nova conversa') ? conv.title : '';
-        cockpitObjective.value = conv.objective || '';
-        setCockpitLockState(!!conv.titleLocked);
-      }
+    const conv = ConversationManager.get(activeConversationId);
+    if (conv) {
+      cockpitTitle.value = (conv.title && conv.title !== 'Nova conversa') ? conv.title : '';
+      cockpitObjective.value = conv.objective || '';
+      setCockpitLockState(!!conv.titleLocked);
     }
   }
 }
 
 function setWelcomeFull() {
-  // In perpetual mode, just ensure particles run and greeting shows
-  cockpit.classList.add('hidden');
   if (!particlesRunning) startParticles();
   updatePerpetualGreeting();
 }
@@ -1051,7 +1048,7 @@ cockpitLock.addEventListener('click', () => {
 });
 
 function updateWelcomeScreen() {
-  if (isSessionMode) {
+  if (appMode === 'session-active') {
     const msgs = chatArea.querySelectorAll('.chat-message');
     if (msgs.length > 0) {
       setWelcomeMini();
@@ -1262,7 +1259,7 @@ function formatMessage(text, role) {
 
 // ===== GROK API =====
 async function callGrokAPI(userMessage) {
-  const history = isSessionMode ? conversationHistory : perpetualHistory;
+  const history = appMode !== 'home' ? conversationHistory : perpetualHistory;
   history.push({ role: 'user', content: userMessage });
 
   // Sliding window: keep system prompt + last 20 messages
@@ -1297,7 +1294,7 @@ async function callGrokAPI(userMessage) {
   history.push({ role: 'assistant', content: assistantMessage });
 
   // Update reference if session mode (array may have been rebuilt)
-  if (isSessionMode) {
+  if (appMode !== 'home') {
     conversationHistory = history;
   } else {
     perpetualHistory = history;
@@ -1313,19 +1310,19 @@ async function processCommand(text, fromVoice = false) {
   // Check for session command
   const trimmed = text.trim().toLowerCase();
   if (trimmed === '/sessao' || trimmed === '/sessão' || trimmed === 'abre sessao' || trimmed === 'abre sessão' || trimmed === 'abrir sessao' || trimmed === 'abrir sessão') {
-    if (!isSessionMode) {
+    if (appMode === 'home') {
       openSession(perpetualMessages.children.length > 0);
     }
     return;
   }
 
-  if (isSessionMode) {
+  if (appMode !== 'home') {
     // === SESSION MODE ===
     if (!activeConversationId) {
       const conv = ConversationManager.create();
       activeConversationId = conv.id;
       ConversationManager.setActiveId(conv.id);
-      activateSessionCockpit();
+      setAppMode('session-active');
       renderConversationList();
     }
 
@@ -1613,12 +1610,12 @@ function updateLiveTranscript(text) {
     bubble = document.createElement('div');
     bubble.id = 'liveTranscript';
     bubble.className = 'chat-message user live-transcript';
-    const target = isSessionMode ? messagesWrap : perpetualMessages;
+    const target = appMode !== 'home' ? messagesWrap : perpetualMessages;
     target.appendChild(bubble);
-    if (isSessionMode) setWelcomeMini();
+    if (appMode === 'session-active') setWelcomeMini();
   }
   bubble.textContent = text;
-  const scrollTarget = isSessionMode ? chatArea : perpetualChatArea;
+  const scrollTarget = appMode !== 'home' ? chatArea : perpetualMessages;
   scrollTarget.scrollTop = scrollTarget.scrollHeight;
 }
 
@@ -2579,8 +2576,7 @@ function init() {
   synthesis.getVoices();
 
   // Always start in perpetual mode
-  isSessionMode = false;
-  document.body.classList.remove('session-mode');
+  setAppMode('home');
   updatePerpetualGreeting();
   initDashboard();
   if (!particlesRunning) startParticles();
