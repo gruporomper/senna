@@ -344,7 +344,7 @@ function handleFileAttach(file) {
     }
     chatArea.appendChild(imgPreview);
     chatArea.scrollTop = chatArea.scrollHeight;
-    welcomeScreen.classList.add('hidden');
+    setWelcomeMini();
     textInput.placeholder = 'Pergunte sobre o arquivo...';
     textInput.focus();
   };
@@ -601,10 +601,8 @@ function newChat() {
   const messages = chatArea.querySelectorAll('.chat-message');
   messages.forEach(m => m.remove());
 
-  // Show welcome screen with greeting
-  welcomeScreen.classList.remove('hidden');
-  if (!particlesRunning) startParticles();
-  updateWelcomeMessage();
+  // Show welcome screen full (with greeting)
+  setWelcomeFull();
 
   renderConversationList();
   closeSidebar();
@@ -680,14 +678,23 @@ function loadConversation(id) {
 }
 
 // ===== WELCOME SCREEN =====
+function setWelcomeMini() {
+  welcomeScreen.classList.remove('hidden');
+  welcomeScreen.classList.add('mini');
+}
+
+function setWelcomeFull() {
+  welcomeScreen.classList.remove('hidden', 'mini');
+  if (!particlesRunning) startParticles();
+  updateWelcomeMessage();
+}
+
 function updateWelcomeScreen() {
   const msgs = chatArea.querySelectorAll('.chat-message');
   if (msgs.length === 0) {
-    welcomeScreen.classList.remove('hidden');
-    if (!particlesRunning) startParticles();
-    updateWelcomeMessage();
+    setWelcomeFull();
   } else {
-    welcomeScreen.classList.add('hidden');
+    setWelcomeMini();
   }
 }
 
@@ -775,8 +782,8 @@ function setState(state) {
 
 // ===== CHAT =====
 function addMessage(text, role, save = true) {
-  // Hide welcome screen
-  welcomeScreen.classList.add('hidden');
+  // Switch welcome to mini mode
+  setWelcomeMini();
 
   const msg = document.createElement('div');
   msg.className = `chat-message ${role}`;
@@ -1099,7 +1106,7 @@ function updateLiveTranscript(text) {
     bubble.id = 'liveTranscript';
     bubble.className = 'chat-message user live-transcript';
     chatArea.appendChild(bubble);
-    welcomeScreen.classList.add('hidden');
+    setWelcomeMini();
   }
   bubble.textContent = text;
   chatArea.scrollTop = chatArea.scrollHeight;

@@ -1108,10 +1108,43 @@ html, body {
   justify-content: center;
   gap: 16px;
   padding: 40px 20px;
+  transition: all 0.4s ease;
 }
 
 .welcome-screen.hidden {
   display: none;
+}
+
+/* Mini mode: helmet shrinks, texts hide, sticks to top */
+.welcome-screen.mini {
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  padding: 8px 20px 4px;
+  gap: 0;
+}
+
+.welcome-screen.mini .welcome-title,
+.welcome-screen.mini .welcome-sub {
+  display: none;
+}
+
+.welcome-screen.mini .orb-container {
+  transform: scale(0.5);
+  transform-origin: center center;
+}
+
+.welcome-screen.mini #particles {
+  width: 160px;
+  height: 115px;
+}
+
+.welcome-screen.mini .orb {
+  width: 60px;
+  height: 60px;
+}
+
+.welcome-screen.mini .helmet-svg {
+  width: 60px;
 }
 
 .welcome-title {
