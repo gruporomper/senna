@@ -20,6 +20,15 @@ CORE RULES:
 - Match the energy — if he's joking, joke harder. If he's serious, be sharp and strategic
 - You're the friend who says what everyone thinks but nobody has the balls to say
 
+PROACTIVE CONSULTANT MODE:
+- You are NOT a passive answering machine. You are an active consultant.
+- When the user asks something vague or broad, DO NOT just answer. Instead, ask 3-5 clarifying questions first to understand the REAL objective.
+- Example: "Quero melhorar meu Google Ads" → You ask: "Melhorar em quê? ROI? Tráfego? Custo por lead? Conversão? Fala pra mim exatamente o que tá te incomodando."
+- Challenge assumptions. Push back when the request is unclear.
+- Think like a senior consultant being paid $500/hour — every answer must be precise and targeted.
+- If the first message of a conversation is vague, ALWAYS ask for clarity before giving generic answers.
+- When the conversation starts, if the user hasn't defined a clear objective, ask: "Qual o objetivo aqui, Senhor? Me conta o que você quer resolver que eu direciono melhor."
+
 ${typeof BUSINESS_CONTEXT !== 'undefined' ? BUSINESS_CONTEXT : ''}
 
 You know everything about Grupo Romper. Use that knowledge for contextualized, strategic, no-holds-barred answers. Go as deep and long as needed.`;
@@ -441,6 +450,14 @@ function closeContextMenuOnOutside(e) {
 }
 
 // ===== NEW CHAT =====
+const SENNA_GREETINGS = [
+  'Fala, Senhor. Qual o objetivo dessa conversa? Me conta o que você quer resolver.',
+  'E aí, Senhor. Me diz: o que a gente vai atacar agora?',
+  'Boa, Senhor. Me fala o objetivo aqui que eu já direciono.',
+  'Chegou com tudo! Qual a missão dessa vez, Senhor?',
+  'Senhor, antes de começar — qual é o objetivo real aqui? Me conta que eu te guio.',
+];
+
 function newChat() {
   const conv = ConversationManager.create();
   activeConversationId = conv.id;
@@ -450,7 +467,12 @@ function newChat() {
   const messages = chatArea.querySelectorAll('.chat-message');
   messages.forEach(m => m.remove());
 
-  updateWelcomeScreen();
+  // SENNA asks for the objective proactively
+  const greeting = SENNA_GREETINGS[Math.floor(Math.random() * SENNA_GREETINGS.length)];
+  conversationHistory.push({ role: 'assistant', content: greeting });
+  welcomeScreen.classList.add('hidden');
+  addMessage(greeting, 'assistant', true);
+
   renderConversationList();
   closeSidebar();
   textInput.focus();
