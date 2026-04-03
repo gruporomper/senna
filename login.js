@@ -1,7 +1,7 @@
 // ===== SENNA — Login =====
-// Apenas emails @romper.global podem acessar
+// Apenas emails autorizados podem acessar
 
-const ALLOWED_DOMAIN = 'romper.global';
+const ALLOWED_EMAILS = ['marlon@romper.global'];
 let supabaseClient = null;
 
 // Load Supabase config from server
@@ -27,9 +27,9 @@ async function checkSession() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
     const email = session.user.email || '';
-    if (!email.endsWith('@' + ALLOWED_DOMAIN)) {
+    if (!ALLOWED_EMAILS.includes(email.toLowerCase())) {
       await supabaseClient.auth.signOut();
-      showError('Acesso restrito a emails @' + ALLOWED_DOMAIN);
+      showError('Acesso restrito. Email nao autorizado.');
       return;
     }
     window.location.href = '/';
@@ -68,8 +68,8 @@ document.getElementById('emailForm').addEventListener('submit', async (e) => {
   if (!email) return;
 
   // Validate domain
-  if (!email.endsWith('@' + ALLOWED_DOMAIN)) {
-    showError('Apenas emails @' + ALLOWED_DOMAIN + ' podem acessar o SENNA.');
+  if (!ALLOWED_EMAILS.includes(email.toLowerCase())) {
+    showError('Acesso restrito. Email nao autorizado.');
     return;
   }
 
