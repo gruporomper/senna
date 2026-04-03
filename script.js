@@ -1384,8 +1384,8 @@ async function processCommand(text, fromVoice = false) {
   }
 }
 
-// ===== PIPER TTS (self-hosted) =====
-// Self-hosted Piper TTS at VPS 72.60.123.52:8090
+// ===== KOKORO TTS (self-hosted) =====
+// Self-hosted Kokoro TTS at VPS 72.60.123.52:8880 (OpenAI-compatible API)
 let currentAudio = null;
 let speakAudioCtx = null;
 let speakAnalyser = null;
@@ -1424,16 +1424,21 @@ async function speak(text, onEnd) {
   synthesis.cancel();
 
   try {
-    const response = await fetch('http://72.60.123.52:8090/tts', {
+    const response = await fetch('http://72.60.123.52:8880/v1/audio/speech', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ text: text })
+      body: JSON.stringify({
+        model: 'kokoro',
+        input: text,
+        voice: 'pm_alex',
+        response_format: 'wav'
+      })
     });
 
     if (!response.ok) {
-      console.error('Piper TTS error:', response.status);
+      console.error('Kokoro TTS error:', response.status);
       speakFallback(text, onEnd);
       return;
     }
@@ -1472,7 +1477,7 @@ async function speak(text, onEnd) {
       if (speakAnalyser) animateSpeakingHelmet();
     }).catch(() => {});
   } catch (error) {
-    console.error('Piper TTS fetch error:', error);
+    console.error('Kokoro TTS fetch error:', error);
     speakFallback(text, onEnd);
   }
 }
