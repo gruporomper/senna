@@ -1215,6 +1215,10 @@ html, body {
   height: 14px;
 }
 
+.cockpit-lock svg.hidden {
+  display: none;
+}
+
 .cockpit-lock:hover {
   color: var(--yellow);
   background: rgba(255, 215, 0, 0.08);

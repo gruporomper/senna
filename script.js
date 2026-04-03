@@ -693,10 +693,9 @@ function setWelcomeMini() {
   if (activeConversationId) {
     const conv = ConversationManager.get(activeConversationId);
     if (conv) {
-      cockpitTitle.value = conv.title || '';
+      cockpitTitle.value = (conv.title && conv.title !== 'Nova conversa') ? conv.title : '';
       cockpitObjective.value = conv.objective || '';
-      const locked = conv.titleLocked || false;
-      setCockpitLockState(locked);
+      setCockpitLockState(!!conv.titleLocked);
     }
   }
 }
