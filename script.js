@@ -1150,7 +1150,11 @@ function initSpeechRecognition() {
 
 // ===== RECORDING UI =====
 function startRecording() {
-  if (!isRecognitionSupported || currentState === 'thinking' || currentState === 'speaking') return;
+  console.log('[MIC] startRecording called, supported:', isRecognitionSupported, 'state:', currentState);
+  if (!isRecognitionSupported || currentState === 'thinking' || currentState === 'speaking') {
+    console.warn('[MIC] Blocked: supported=', isRecognitionSupported, 'state=', currentState);
+    return;
+  }
 
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
   synthesis.cancel();
@@ -1159,14 +1163,17 @@ function startRecording() {
   setState('listening');
 
   // Show recording bar, hide input wrapper
-  document.getElementById('inputWrapper').classList.add('hidden');
-  recordingRow.classList.remove('hidden');
+  const iw = document.getElementById('inputWrapper');
+  console.log('[MIC] inputWrapper:', iw, 'recordingRow:', recordingRow);
+  if (iw) iw.classList.add('hidden');
+  if (recordingRow) recordingRow.classList.remove('hidden');
 
   // Start speech recognition
   try {
     recognition.start();
+    console.log('[MIC] recognition.start() OK');
   } catch (e) {
-    console.error('Recognition start error:', e);
+    console.error('[MIC] Recognition start error:', e);
     stopRecording();
     return;
   }
@@ -1895,3 +1902,4 @@ function init() {
 }
 
 init();
+console.log('[SENNA] Init complete. Recognition supported:', isRecognitionSupported, 'micBtn:', !!micBtn, 'recordingRow:', !!recordingRow);
