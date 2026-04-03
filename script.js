@@ -263,6 +263,7 @@ function closeSidebar() {
 }
 
 sidebarToggle.addEventListener('click', toggleSidebar);
+document.querySelector('.helmet-icon')?.addEventListener('click', toggleSidebar);
 sidebarOverlay.addEventListener('click', closeSidebar);
 
 // ===== CONVERSATION LIST RENDERING =====

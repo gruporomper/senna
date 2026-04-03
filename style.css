@@ -115,14 +115,13 @@ html, body {
 .sidebar.collapsed .icon-expand { display: none; }
 .sidebar.collapsed .icon-collapse { display: none; }
 
-/* Show helmet icon when collapsed */
+/* Hide helmet toggle SVG — real helmet image is used instead */
 .sidebar .helmet-toggle { display: none; }
-.sidebar.collapsed .helmet-toggle { display: block; }
+.sidebar.collapsed .helmet-toggle { display: none; }
 
+/* Hide toggle button when collapsed — helmet-icon acts as visual */
 .sidebar.collapsed .sidebar-toggle-btn {
-  width: 36px;
-  height: 32px;
-  margin: 0 auto;
+  display: none;
 }
 
 /* ===== SIDEBAR COLLAPSED STATE ===== */
@@ -140,6 +139,7 @@ html, body {
 .sidebar.collapsed .helmet-icon {
   width: 36px;
   height: 32px;
+  cursor: pointer;
 }
 
 .sidebar.collapsed .sidebar-header {
