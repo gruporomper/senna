@@ -1576,7 +1576,9 @@ body.state-listening .input-row {
 .recording-row {
   display: flex;
   align-items: center;
+  max-width: 800px;
   width: 100%;
+  margin: 8px auto 0;
   background: var(--surface);
   border: 1px solid rgba(0, 155, 58, 0.25);
   border-radius: 24px;
@@ -1586,7 +1588,8 @@ body.state-listening .input-row {
 }
 
 .recording-row.hidden,
-.input-row.hidden {
+.input-row.hidden,
+.input-wrapper.hidden {
   display: none;
 }
 
