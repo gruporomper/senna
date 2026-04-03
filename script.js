@@ -595,8 +595,14 @@ const SENNA_GREETINGS = [
 ];
 
 function newChat() {
-  const conv = ConversationManager.create();
+  // Reuse existing empty conversation if there is one
+  const all = ConversationManager.getAll();
+  let conv = all.find(c => c.title === 'Nova conversa' && (!c.messages || c.messages.length === 0));
+  if (!conv) {
+    conv = ConversationManager.create();
+  }
   activeConversationId = conv.id;
+  ConversationManager.setActiveId(conv.id);
   conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
 
   // Clear chat messages (keep welcome screen)
