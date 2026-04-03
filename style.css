@@ -1116,7 +1116,7 @@ body.session-mode .main-stripe {
 }
 
 body.session-mode .perpetual-home {
-  display: none;
+  display: none !important;
 }
 
 /* ===== DASHBOARD WIDGETS ===== */
@@ -1370,11 +1370,14 @@ body.session-prechat .session-prechat-hero {
   display: flex;
 }
 
-/* In prechat, hide the chat area and cockpit stripe */
+/* In prechat, hide the chat area, cockpit, and stripe */
 body.session-prechat .chat-area {
   display: none !important;
 }
 body.session-prechat .main-stripe {
+  display: none !important;
+}
+body.session-prechat .cockpit {
   display: none !important;
 }
 

@@ -975,8 +975,8 @@ const cockpitLock = document.getElementById('cockpitLock');
 const cockpitObjective = document.getElementById('cockpitObjective');
 
 function setWelcomeMini() {
-  // In session mode, show cockpit
-  if (isSessionMode) {
+  // In session mode, show cockpit — but NOT during prechat phase
+  if (isSessionMode && !document.body.classList.contains('session-prechat')) {
     cockpit.classList.remove('hidden');
     if (!particlesRunning) startParticles();
     if (activeConversationId) {
