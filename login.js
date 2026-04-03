@@ -10,7 +10,7 @@ async function initAuth() {
 
           // Load Supabase JS library
           const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+                script.src = 'https://cdn.jsdelivr.net/npm/@hsupabase/supabase-js@2.45.0/dist/umd/supabase.min.js';
                 script.onload = () => {
                               supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
                               checkSession();
