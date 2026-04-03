@@ -1151,8 +1151,8 @@ function initSpeechRecognition() {
 // ===== RECORDING UI =====
 function startRecording() {
   console.log('[MIC] startRecording called, supported:', isRecognitionSupported, 'state:', currentState);
-  if (!isRecognitionSupported || currentState === 'thinking' || currentState === 'speaking') {
-    console.warn('[MIC] Blocked: supported=', isRecognitionSupported, 'state=', currentState);
+  if (currentState === 'thinking' || currentState === 'speaking') {
+    console.warn('[MIC] Blocked: state=', currentState);
     return;
   }
 
@@ -1160,6 +1160,7 @@ function startRecording() {
   synthesis.cancel();
 
   voiceTranscript = '';
+  isListening = true;
   setState('listening');
 
   // Show recording bar, hide input wrapper
@@ -1168,17 +1169,17 @@ function startRecording() {
   if (iw) iw.classList.add('hidden');
   if (recordingRow) recordingRow.classList.remove('hidden');
 
-  // Start speech recognition
-  try {
-    recognition.start();
-    console.log('[MIC] recognition.start() OK');
-  } catch (e) {
-    console.error('[MIC] Recognition start error:', e);
-    stopRecording();
-    return;
+  // Start speech recognition (if supported)
+  if (isRecognitionSupported && recognition) {
+    try {
+      recognition.start();
+      console.log('[MIC] recognition.start() OK');
+    } catch (e) {
+      console.error('[MIC] Recognition start error:', e);
+    }
   }
 
-  // Start waveform visualization
+  // Start waveform visualization (works even without recognition)
   startWaveform();
 }
 
