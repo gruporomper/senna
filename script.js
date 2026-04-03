@@ -1424,7 +1424,7 @@ async function speak(text, onEnd) {
   synthesis.cancel();
 
   try {
-    const response = await fetch('http://72.60.123.52:8880/v1/audio/speech', {
+    const response = await fetch('/api/tts', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

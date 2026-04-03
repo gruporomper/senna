@@ -85,24 +85,36 @@ http.createServer(async (req, res) => {
     return;
   }
 
-  // API Proxy: /api/tts
+  // API Proxy: /api/tts → Kokoro TTS (localhost:8880)
   if (req.url === '/api/tts' && req.method === 'POST') {
     try {
       const body = await readBody(req);
-      const parsed = JSON.parse(body);
-      const postData = JSON.stringify(parsed);
+      const postData = JSON.stringify(JSON.parse(body));
 
-      proxyRequest({
-        hostname: 'api.elevenlabs.io',
-        port: 443,
-        path: `/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`,
+      const apiReq = require('http').request({
+        hostname: 'localhost',
+        port: 8880,
+        path: '/v1/audio/speech',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'xi-api-key': ELEVENLABS_API_KEY,
           'Content-Length': Buffer.byteLength(postData)
         }
-      }, postData, res);
+      }, (apiRes) => {
+        const headers = {
+          'Content-Type': apiRes.headers['content-type'] || 'audio/wav',
+          'Access-Control-Allow-Origin': '*'
+        };
+        res.writeHead(apiRes.statusCode, headers);
+        apiRes.pipe(res);
+      });
+      apiReq.on('error', (err) => {
+        console.error('Kokoro TTS proxy error:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      });
+      apiReq.write(postData);
+      apiReq.end();
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Invalid request' }));
