@@ -681,6 +681,7 @@ function loadConversation(id) {
 function setWelcomeMini() {
   welcomeScreen.classList.remove('hidden');
   welcomeScreen.classList.add('mini');
+  if (!particlesRunning) startParticles();
 }
 
 function setWelcomeFull() {

@@ -1119,9 +1119,10 @@ html, body {
 .welcome-screen.mini {
   flex: 0 0 auto;
   align-items: center;
-  justify-content: flex-start;
-  padding: 12px 20px 8px;
+  justify-content: center;
+  padding: 8px 20px 0;
   gap: 0;
+  width: 100%;
 }
 
 .welcome-screen.mini .welcome-title,
@@ -1132,7 +1133,6 @@ html, body {
 .welcome-screen.mini .orb-container {
   transform: scale(0.7);
   transform-origin: center center;
-  margin: 0 auto;
 }
 
 .welcome-title {
