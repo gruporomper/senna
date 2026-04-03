@@ -1449,7 +1449,9 @@ body.state-listening .input-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  max-width: 800px;
   width: 100%;
+  margin: 0 auto;
 }
 
 /* Attach Buttons */
