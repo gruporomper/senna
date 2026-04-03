@@ -31,7 +31,10 @@ async function checkSession() {
 
 // Google Sign In
 document.getElementById('googleSignIn').addEventListener('click', async () => {
-  if (!supabase) return;
+  if (!supabase) {
+    showError('Carregando... tente novamente em instantes.');
+    return;
+  }
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
@@ -48,10 +51,17 @@ document.getElementById('googleSignIn').addEventListener('click', async () => {
 // Email Magic Link
 document.getElementById('emailForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!supabase) return;
+  if (!supabase) {
+    showError('Carregando... tente novamente em instantes.');
+    return;
+  }
 
   const email = document.getElementById('emailInput').value.trim();
   if (!email) return;
+
+  const btn = document.querySelector('#emailForm button');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
 
   const { error } = await supabase.auth.signInWithOtp({
     email: email,
@@ -60,10 +70,12 @@ document.getElementById('emailForm').addEventListener('submit', async (e) => {
     }
   });
 
+  btn.disabled = false;
+  btn.innerHTML = 'Continuar com e-mail &nbsp;→';
+
   if (error) {
     showError(error.message);
   } else {
-    // Show success message
     document.getElementById('emailForm').classList.add('hidden');
     document.getElementById('magicSent').classList.remove('hidden');
   }
