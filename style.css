@@ -1115,11 +1115,12 @@ html, body {
   display: none;
 }
 
-/* Mini mode: helmet shrinks, texts hide, sticks to top */
+/* Mini mode: helmet shrinks, texts hide, sticks to top center */
 .welcome-screen.mini {
   flex: 0 0 auto;
+  align-items: center;
   justify-content: flex-start;
-  padding: 8px 20px 4px;
+  padding: 12px 20px 8px;
   gap: 0;
 }
 
@@ -1131,6 +1132,7 @@ html, body {
 .welcome-screen.mini .orb-container {
   transform: scale(0.5);
   transform-origin: center center;
+  margin: 0 auto;
 }
 
 .welcome-screen.mini #particles {
