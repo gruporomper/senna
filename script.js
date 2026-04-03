@@ -1245,6 +1245,53 @@ async function startWaveform() {
   }
 }
 
+// Audio-reactive helmet effect
+function pulseHelmetWithAudio(amplitude) {
+  // Apply to all visible orb containers (welcome + cockpit)
+  const helmets = document.querySelectorAll('.helmet-svg');
+  const glows = document.querySelectorAll('.orb-glow');
+  const rings1 = document.querySelectorAll('.orb-ring.ring-1');
+  const rings2 = document.querySelectorAll('.orb-ring.ring-2');
+
+  // Scale: 1.0 at silence, up to 1.18 at max volume
+  const scale = 1 + amplitude * 0.18;
+  // Glow intensity: stronger with louder voice
+  const glowScale = 1 + amplitude * 0.4;
+  const glowOpacity = 0.5 + amplitude * 0.5;
+  // Green glow intensity based on volume
+  const greenIntensity = Math.floor(30 + amplitude * 225);
+  const greenGlow = `drop-shadow(0 0 ${15 + amplitude * 35}px rgba(0, ${greenIntensity}, 58, ${0.4 + amplitude * 0.5})) drop-shadow(0 0 ${40 + amplitude * 40}px rgba(0, ${greenIntensity}, 58, ${0.15 + amplitude * 0.2}))`;
+
+  helmets.forEach(h => {
+    h.style.transform = `scale(${scale})`;
+    h.style.filter = greenGlow;
+  });
+  glows.forEach(g => {
+    g.style.transform = `scale(${glowScale})`;
+    g.style.opacity = glowOpacity;
+  });
+  rings1.forEach(r => {
+    r.style.transform = `scale(${1 + amplitude * 0.12})`;
+  });
+  rings2.forEach(r => {
+    r.style.transform = `scale(${1 + amplitude * 0.08})`;
+  });
+}
+
+function resetHelmetPulse() {
+  document.querySelectorAll('.helmet-svg').forEach(h => {
+    h.style.transform = '';
+    h.style.filter = '';
+  });
+  document.querySelectorAll('.orb-glow').forEach(g => {
+    g.style.transform = '';
+    g.style.opacity = '';
+  });
+  document.querySelectorAll('.orb-ring').forEach(r => {
+    r.style.transform = '';
+  });
+}
+
 // Waveform history for scrolling effect
 let waveformHistory = [];
 
@@ -1269,6 +1316,9 @@ function drawWaveform() {
     let sum = 0;
     for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
     const avg = sum / bufferLength / 255;
+
+    // Audio-reactive helmet pulse
+    pulseHelmetWithAudio(avg);
 
     // Push to history (scrolling waveform)
     waveformHistory.push(avg);
@@ -1320,6 +1370,7 @@ function drawWaveform() {
 }
 
 function stopWaveform() {
+  resetHelmetPulse();
   if (waveformAnimId) {
     cancelAnimationFrame(waveformAnimId);
     waveformAnimId = null;
