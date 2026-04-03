@@ -793,7 +793,7 @@ function addPerpetualMessage(text, role) {
   }
   msg.dataset.rawText = text;
   perpetualMessages.appendChild(msg);
-  perpetualChatArea.scrollTop = perpetualChatArea.scrollHeight;
+  perpetualMessages.scrollTop = perpetualMessages.scrollHeight;
 }
 
 function openSession(carryMessages = false) {
@@ -1367,7 +1367,7 @@ async function processCommand(text, fromVoice = false) {
           openSession(true);
         });
         perpetualMessages.appendChild(chip);
-        perpetualChatArea.scrollTop = perpetualChatArea.scrollHeight;
+        perpetualMessages.scrollTop = perpetualMessages.scrollHeight;
       }
 
       if (fromVoice) {
