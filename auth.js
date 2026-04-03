@@ -9,8 +9,17 @@ let sennaSupabase = null;
     const config = await res.json();
     sennaSupabase = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
 
+    const ALLOWED_DOMAIN = 'romper.global';
     const { data: { session } } = await sennaSupabase.auth.getSession();
     if (!session) {
+      window.location.href = '/login.html';
+      return;
+    }
+
+    // Block non-allowed domains
+    const userEmail = session.user.email || '';
+    if (!userEmail.endsWith('@' + ALLOWED_DOMAIN)) {
+      await sennaSupabase.auth.signOut();
       window.location.href = '/login.html';
       return;
     }
