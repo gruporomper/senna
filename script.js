@@ -156,34 +156,67 @@ const cancelRecBtn = document.getElementById('cancelRecBtn');
 const sendRecBtn = document.getElementById('sendRecBtn');
 const canvas = document.getElementById('particles');
 const ctx = canvas.getContext('2d');
-const cameraBtn = document.getElementById('cameraBtn');
+const attachBtn = document.getElementById('attachBtn');
+const attachMenu = document.getElementById('attachMenu');
+const attachCamera = document.getElementById('attachCamera');
+const attachFile = document.getElementById('attachFile');
 const cameraInput = document.getElementById('cameraInput');
+const fileInput = document.getElementById('fileInput');
 
-// ===== CAMERA =====
-cameraBtn.addEventListener('click', () => {
-  cameraInput.click();
+// ===== ATTACH MENU =====
+attachBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  attachMenu.classList.toggle('hidden');
+  attachBtn.classList.toggle('active');
 });
 
-cameraInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.attach-wrapper')) {
+    attachMenu.classList.add('hidden');
+    attachBtn.classList.remove('active');
+  }
+});
 
+attachCamera.addEventListener('click', () => {
+  cameraInput.click();
+  attachMenu.classList.add('hidden');
+  attachBtn.classList.remove('active');
+});
+
+attachFile.addEventListener('click', () => {
+  fileInput.click();
+  attachMenu.classList.add('hidden');
+  attachBtn.classList.remove('active');
+});
+
+function handleFileAttach(file) {
+  if (!file) return;
   const reader = new FileReader();
   reader.onload = (ev) => {
-    // Show image preview in chat
     const imgPreview = document.createElement('div');
     imgPreview.className = 'chat-message user';
-    imgPreview.innerHTML = `<div class="msg-content"><img src="${ev.target.result}" class="msg-image" alt="Foto enviada"></div>`;
+    if (file.type.startsWith('image/')) {
+      imgPreview.innerHTML = `<div class="msg-content"><img src="${ev.target.result}" class="msg-image" alt="Foto enviada"></div>`;
+    } else {
+      imgPreview.innerHTML = `<div class="msg-content"><span class="msg-file">📎 ${file.name}</span></div>`;
+    }
     chatArea.appendChild(imgPreview);
     chatArea.scrollTop = chatArea.scrollHeight;
     welcomeScreen.classList.add('hidden');
-
-    // Focus text input for user to add a question about the image
-    textInput.placeholder = 'Pergunte sobre a imagem...';
+    textInput.placeholder = 'Pergunte sobre o arquivo...';
     textInput.focus();
   };
   reader.readAsDataURL(file);
+}
+
+cameraInput.addEventListener('change', (e) => {
+  handleFileAttach(e.target.files[0]);
   cameraInput.value = '';
+});
+
+fileInput.addEventListener('change', (e) => {
+  handleFileAttach(e.target.files[0]);
+  fileInput.value = '';
 });
 
 // ===== SIDEBAR =====
