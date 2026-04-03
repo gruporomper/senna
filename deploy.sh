@@ -40,14 +40,20 @@ fi
 
 # 5. Criar .env
 echo "[5/7] Configurando .env..."
-cat > .env << 'ENVEOF'
-GROK_API_KEY=xai-pkU707D7jTpLVRUW7k9nbv39infdGgYhiklAx3cIJxObKbN3YivFWVg1zuA97AtcLXiVBna8QsLLHPnm
-ELEVENLABS_API_KEY=sk_f4702a450f83263c8db95e8974f0df57ac64d6f649d3b8c0
-ELEVENLABS_VOICE_ID=4J31DrhygVjvFsoj7BsM
-SUPABASE_URL=https://dpesnpuymqrdbrhxbyig.supabase.co
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRwZXNucHV5bXFyZGJyaHhieWlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxMTk1NzMsImV4cCI6MjA3NDY5NTU3M30.tAfMbbps2YpvuuyZvgJQQ7BIQ2mZYMTZGcWZZQrYJUc
+# Se .env não existe, criar template (preencher manualmente)
+if [ ! -f .env ]; then
+  cat > .env << 'ENVEOF'
+GROK_API_KEY=REPLACE_WITH_YOUR_KEY
+ELEVENLABS_API_KEY=REPLACE_WITH_YOUR_KEY
+ELEVENLABS_VOICE_ID=REPLACE_WITH_YOUR_ID
+SUPABASE_URL=REPLACE_WITH_YOUR_URL
+SUPABASE_ANON_KEY=REPLACE_WITH_YOUR_KEY
 PORT=3000
 ENVEOF
+  echo "⚠️  .env criado com placeholders — preencha as chaves manualmente!"
+else
+  echo "✓ .env já existe, mantendo chaves atuais."
+fi
 
 # 6. Iniciar com PM2
 echo "[6/7] Iniciando SENNA com PM2..."
