@@ -331,7 +331,11 @@ function buildSystemPrompt() {
 let conversationHistory = [
   { role: 'system', content: buildSystemPrompt() }
 ];
+let perpetualHistory = [
+  { role: 'system', content: buildSystemPrompt() }
+];
 let activeConversationId = null;
+let isSessionMode = false;
 
 // ===== STATE =====
 let currentState = 'idle';
@@ -357,7 +361,11 @@ const orb = document.getElementById('orb');
 const orbStatus = document.getElementById('orbStatus');
 const chatArea = document.getElementById('chatArea');
 const messagesWrap = document.getElementById('messagesWrap');
-const welcomeScreen = document.getElementById('welcomeScreen');
+const perpetualHome = document.getElementById('perpetualHome');
+const perpetualChatArea = document.getElementById('perpetualChatArea');
+const perpetualMessages = document.getElementById('perpetualMessages');
+const perpetualGreeting = document.getElementById('perpetualGreeting');
+const openSessionBtn = document.getElementById('openSessionBtn');
 const textInput = document.getElementById('textInput');
 const sendBtn = document.getElementById('sendBtn');
 const micBtn = document.getElementById('micBtn');
@@ -685,28 +693,33 @@ const SENNA_GREETINGS = [
 ];
 
 function newChat() {
-  // Reuse existing empty conversation if there is one
-  const all = ConversationManager.getAll();
-  let conv = all.find(c => c.title === 'Nova conversa' && (!c.messages || c.messages.length === 0));
-  if (!conv) {
-    conv = ConversationManager.create();
+  if (isSessionMode) {
+    // From session mode → open new session
+    const conv = ConversationManager.create();
+    activeConversationId = conv.id;
+    ConversationManager.setActiveId(conv.id);
+    conversationHistory = [{ role: 'system', content: buildSystemPrompt() }];
+    messagesWrap.innerHTML = '';
+    cockpitTitle.value = '';
+    cockpitObjective.value = '';
+    setCockpitLockState(false);
+    renderConversationList();
+  } else {
+    // Go to perpetual home
+    closeSession();
   }
-  activeConversationId = conv.id;
-  ConversationManager.setActiveId(conv.id);
-  conversationHistory = [{ role: 'system', content: buildSystemPrompt() }];
-
-  // Clear chat messages (keep welcome screen)
-  messagesWrap.innerHTML = '';
-
-  // Show welcome screen full (with greeting)
-  setWelcomeFull();
-
-  renderConversationList();
   closeSidebar();
   textInput.focus();
 }
 
-newChatBtn.addEventListener('click', newChat);
+newChatBtn.addEventListener('click', () => {
+  // "Nova sessao" from sidebar always opens session mode
+  if (!isSessionMode) {
+    openSession(false);
+  } else {
+    newChat();
+  }
+});
 
 // ===== PROFILE MENU =====
 const profileBtn = document.getElementById('profileBtn');
@@ -750,6 +763,79 @@ profileMenu.addEventListener('click', (e) => {
   }
 });
 
+// ===== PERPETUAL MODE =====
+function addPerpetualMessage(text, role) {
+  // Hide greeting when messages start
+  if (perpetualGreeting) perpetualGreeting.classList.add('hidden');
+
+  const msg = document.createElement('div');
+  msg.className = `chat-message ${role}`;
+  if (role === 'assistant') {
+    msg.innerHTML = `<div class="msg-content">${formatMessage(text, role)}</div>`;
+  } else {
+    msg.innerHTML = `<div class="msg-content">${escapeHtml(text)}</div>`;
+  }
+  msg.dataset.rawText = text;
+  perpetualMessages.appendChild(msg);
+  perpetualChatArea.scrollTop = perpetualChatArea.scrollHeight;
+}
+
+function openSession(carryMessages = false) {
+  isSessionMode = true;
+  document.body.classList.add('session-mode');
+
+  // Create new conversation
+  const conv = ConversationManager.create();
+  activeConversationId = conv.id;
+  ConversationManager.setActiveId(conv.id);
+  conversationHistory = [{ role: 'system', content: buildSystemPrompt() }];
+  messagesWrap.innerHTML = '';
+
+  if (carryMessages) {
+    // Migrate perpetual messages to session
+    const msgs = perpetualHistory.filter(m => m.role !== 'system');
+    msgs.forEach(m => {
+      conversationHistory.push(m);
+      addMessage(m.content, m.role, false);
+    });
+    if (msgs.length > 0) {
+      ConversationManager.save(activeConversationId, conversationHistory);
+    }
+  }
+
+  // Show cockpit
+  cockpit.classList.remove('hidden');
+  cockpitTitle.value = '';
+  cockpitObjective.value = '';
+  setCockpitLockState(false);
+
+  renderConversationList();
+  textInput.focus();
+  showClosureToast('Sessao aberta');
+}
+
+function closeSession() {
+  isSessionMode = false;
+  document.body.classList.remove('session-mode');
+  activeConversationId = null;
+  cockpit.classList.add('hidden');
+
+  // Reset perpetual
+  perpetualHistory = [{ role: 'system', content: buildSystemPrompt() }];
+  perpetualMessages.innerHTML = '';
+  if (perpetualGreeting) {
+    perpetualGreeting.classList.remove('hidden');
+    updatePerpetualGreeting();
+  }
+
+  if (!particlesRunning) startParticles();
+  renderConversationList();
+  textInput.focus();
+}
+
+// Open session button
+openSessionBtn.addEventListener('click', () => openSession(false));
+
 // ===== SESSION CLOSURE =====
 function showClosureToast(message) {
   let toast = document.querySelector('.closure-toast');
@@ -767,7 +853,7 @@ function showClosureToast(message) {
 document.getElementById('closureDiscard').addEventListener('click', () => {
   if (!activeConversationId) return;
   ConversationManager.delete(activeConversationId);
-  newChat();
+  closeSession();
   showClosureToast('Sessao descartada');
 });
 
@@ -780,7 +866,7 @@ document.getElementById('closureArchive').addEventListener('click', () => {
     conv.archived = true;
     ConversationManager.saveAll(all);
   }
-  newChat();
+  closeSession();
   showClosureToast('Sessao arquivada');
 });
 
@@ -798,7 +884,7 @@ document.getElementById('closureMemory').addEventListener('click', async () => {
       ConversationManager.saveAll(all);
     }
     const insightCount = memory.insights ? memory.insights.length : 0;
-    newChat();
+    closeSession();
     showClosureToast(`Memoria salva — ${insightCount} insight${insightCount !== 1 ? 's' : ''} extraido${insightCount !== 1 ? 's' : ''}`);
   } catch (err) {
     console.error('Erro ao extrair memoria:', err);
@@ -817,7 +903,7 @@ document.getElementById('closureFavorite').addEventListener('click', () => {
     conv.pinned = true;
     ConversationManager.saveAll(all);
   }
-  newChat();
+  closeSession();
   showClosureToast('Sessao favoritada');
 });
 
@@ -825,6 +911,10 @@ document.getElementById('closureFavorite').addEventListener('click', () => {
 function loadConversation(id) {
   const conv = ConversationManager.get(id);
   if (!conv) return;
+
+  // Enter session mode
+  isSessionMode = true;
+  document.body.classList.add('session-mode');
 
   activeConversationId = id;
   ConversationManager.setActiveId(id);
@@ -840,7 +930,8 @@ function loadConversation(id) {
     }
   });
 
-  updateWelcomeScreen();
+  // Show cockpit
+  setWelcomeMini();
   renderConversationList();
 }
 
@@ -851,29 +942,26 @@ const cockpitLock = document.getElementById('cockpitLock');
 const cockpitObjective = document.getElementById('cockpitObjective');
 
 function setWelcomeMini() {
-  welcomeScreen.classList.add('mini');
-  cockpit.classList.remove('hidden');
-  if (!particlesRunning) startParticles();
-  // Load cockpit data from conversation
-  if (activeConversationId) {
-    const conv = ConversationManager.get(activeConversationId);
-    if (conv) {
-      cockpitTitle.value = (conv.title && conv.title !== 'Nova conversa') ? conv.title : '';
-      cockpitObjective.value = conv.objective || '';
-      setCockpitLockState(!!conv.titleLocked);
+  // In session mode, show cockpit
+  if (isSessionMode) {
+    cockpit.classList.remove('hidden');
+    if (!particlesRunning) startParticles();
+    if (activeConversationId) {
+      const conv = ConversationManager.get(activeConversationId);
+      if (conv) {
+        cockpitTitle.value = (conv.title && conv.title !== 'Nova conversa') ? conv.title : '';
+        cockpitObjective.value = conv.objective || '';
+        setCockpitLockState(!!conv.titleLocked);
+      }
     }
   }
 }
 
 function setWelcomeFull() {
-  welcomeScreen.classList.remove('hidden', 'mini');
+  // In perpetual mode, just ensure particles run and greeting shows
   cockpit.classList.add('hidden');
-  // Move welcome back to chat area if needed
-  if (welcomeScreen.parentElement !== chatArea) {
-    chatArea.insertBefore(welcomeScreen, chatArea.firstChild);
-  }
   if (!particlesRunning) startParticles();
-  updateWelcomeMessage();
+  updatePerpetualGreeting();
 }
 
 function setCockpitLockState(locked) {
@@ -930,11 +1018,11 @@ cockpitLock.addEventListener('click', () => {
 });
 
 function updateWelcomeScreen() {
-  const msgs = chatArea.querySelectorAll('.chat-message');
-  if (msgs.length === 0) {
-    setWelcomeFull();
-  } else {
-    setWelcomeMini();
+  if (isSessionMode) {
+    const msgs = chatArea.querySelectorAll('.chat-message');
+    if (msgs.length > 0) {
+      setWelcomeMini();
+    }
   }
 }
 
@@ -1141,13 +1229,15 @@ function formatMessage(text, role) {
 
 // ===== GROK API =====
 async function callGrokAPI(userMessage) {
-  conversationHistory.push({ role: 'user', content: userMessage });
+  const history = isSessionMode ? conversationHistory : perpetualHistory;
+  history.push({ role: 'user', content: userMessage });
 
-  if (conversationHistory.length > 21) {
-    conversationHistory = [
-      conversationHistory[0],
-      ...conversationHistory.slice(-20)
-    ];
+  // Sliding window: keep system prompt + last 20 messages
+  if (history.length > 21) {
+    const system = history[0];
+    const recent = history.slice(-20);
+    history.length = 0;
+    history.push(system, ...recent);
   }
 
   const response = await fetch('/api/grok', {
@@ -1157,7 +1247,7 @@ async function callGrokAPI(userMessage) {
     },
     body: JSON.stringify({
       model: GROK_MODEL,
-      messages: conversationHistory,
+      messages: history,
       temperature: 0.9,
       max_tokens: 1000
     })
@@ -1171,7 +1261,14 @@ async function callGrokAPI(userMessage) {
 
   const data = await response.json();
   const assistantMessage = data.choices[0].message.content;
-  conversationHistory.push({ role: 'assistant', content: assistantMessage });
+  history.push({ role: 'assistant', content: assistantMessage });
+
+  // Update reference if session mode (array may have been rebuilt)
+  if (isSessionMode) {
+    conversationHistory = history;
+  } else {
+    perpetualHistory = history;
+  }
 
   return assistantMessage;
 }
@@ -1180,33 +1277,74 @@ async function callGrokAPI(userMessage) {
 async function processCommand(text, fromVoice = false) {
   if (!text.trim()) return;
 
-  // Ensure we have an active conversation
-  if (!activeConversationId) {
-    const conv = ConversationManager.create();
-    activeConversationId = conv.id;
+  // Check for session command
+  const trimmed = text.trim().toLowerCase();
+  if (trimmed === '/sessao' || trimmed === '/sessão' || trimmed === 'abre sessao' || trimmed === 'abre sessão' || trimmed === 'abrir sessao' || trimmed === 'abrir sessão') {
+    if (!isSessionMode) {
+      openSession(perpetualMessages.children.length > 0);
+    }
+    return;
   }
 
-  addMessage(text, 'user');
-  setState('thinking');
+  if (isSessionMode) {
+    // === SESSION MODE ===
+    if (!activeConversationId) {
+      const conv = ConversationManager.create();
+      activeConversationId = conv.id;
+    }
 
-  try {
-    const response = await callGrokAPI(text);
-    addMessage(response, 'assistant');
+    addMessage(text, 'user');
+    setState('thinking');
 
-    if (fromVoice) {
-      // Voice input → speak the response
-      setState('speaking');
-      speak(response, () => {
+    try {
+      const response = await callGrokAPI(text);
+      addMessage(response, 'assistant');
+
+      if (fromVoice) {
+        setState('speaking');
+        speak(response, () => setState('idle'));
+      } else {
         setState('idle');
-      });
-    } else {
-      // Text input → just show, no speech
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      addMessage('Erro ao conectar com o Grok. Verifique a conexão.', 'assistant');
       setState('idle');
     }
-  } catch (error) {
-    console.error('Error:', error);
-    addMessage('Erro ao conectar com o Grok. Verifique a conexão.', 'assistant');
-    setState('idle');
+  } else {
+    // === PERPETUAL MODE ===
+    addPerpetualMessage(text, 'user');
+    setState('thinking');
+
+    try {
+      const response = await callGrokAPI(text);
+      addPerpetualMessage(response, 'assistant');
+
+      // Check if response is complex enough to suggest a session
+      const shouldSuggest = response.length > 500 || (response.match(/```/g) || []).length >= 2 || (response.match(/^\d+\./gm) || []).length >= 5;
+      if (shouldSuggest) {
+        const chip = document.createElement('div');
+        chip.className = 'session-suggestion';
+        chip.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg> Abrir sessao dedicada?';
+        chip.addEventListener('click', () => {
+          chip.remove();
+          openSession(true);
+        });
+        perpetualMessages.appendChild(chip);
+        perpetualChatArea.scrollTop = perpetualChatArea.scrollHeight;
+      }
+
+      if (fromVoice) {
+        setState('speaking');
+        speak(response, () => setState('idle'));
+      } else {
+        setState('idle');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      addPerpetualMessage('Erro ao conectar com o Grok. Verifique a conexão.', 'assistant');
+      setState('idle');
+    }
   }
 }
 
@@ -1439,11 +1577,13 @@ function updateLiveTranscript(text) {
     bubble = document.createElement('div');
     bubble.id = 'liveTranscript';
     bubble.className = 'chat-message user live-transcript';
-    messagesWrap.appendChild(bubble);
-    setWelcomeMini();
+    const target = isSessionMode ? messagesWrap : perpetualMessages;
+    target.appendChild(bubble);
+    if (isSessionMode) setWelcomeMini();
   }
   bubble.textContent = text;
-  chatArea.scrollTop = chatArea.scrollHeight;
+  const scrollTarget = isSessionMode ? chatArea : perpetualChatArea;
+  scrollTarget.scrollTop = scrollTarget.scrollHeight;
 }
 
 function removeLiveTranscript() {
@@ -2191,88 +2331,30 @@ textInput.addEventListener('blur', () => {
 // Start placeholder animation
 animatePlaceholder();
 
-// ===== DYNAMIC WELCOME MESSAGE =====
-const welcomeTitle = document.getElementById('welcomeTitle');
-const welcomeSub = document.getElementById('welcomeSub');
+// ===== PERPETUAL GREETING =====
 
-function updateWelcomeMessage() {
-  const conversations = ConversationManager.getAll();
+function updatePerpetualGreeting() {
+  if (!perpetualGreeting) return;
   const hour = new Date().getHours();
-  const isFirstVisit = conversations.length === 0;
 
-  // Time-based greeting
   let greeting;
   if (hour >= 5 && hour < 12) greeting = 'Bom dia';
   else if (hour >= 12 && hour < 18) greeting = 'Boa tarde';
   else greeting = 'Boa noite';
 
-  if (isFirstVisit) {
-    // New user
-    const newUserMessages = [
-      { title: `${greeting}, Senhor. Sou o SENNA.`, sub: 'Vamos bater um papo pra você aprender a usar o sistema?' },
-      { title: 'Bem-vindo ao SENNA.', sub: 'Estou vendo que é novo por aqui. Posso te mostrar como funciono?' },
-      { title: `${greeting}, Senhor. Prazer em conhecê-lo.`, sub: 'Me diga como posso ajudar e eu acelero pra você.' },
-    ];
-    const msg = newUserMessages[Math.floor(Math.random() * newUserMessages.length)];
-    welcomeTitle.textContent = msg.title;
-    welcomeSub.textContent = msg.sub;
-    return;
-  }
+  const greetings = [
+    `${greeting}, Senhor. Manda a missao.`,
+    `${greeting}, Senhor. To on.`,
+    `${greeting}. No que posso ajudar?`,
+    `${greeting}, Senhor. Bora acelerar?`,
+    `SENNA on. Fala comigo.`
+  ];
 
-  // Returning user — build contextual messages
-  const messages = [];
-
-  // Check most recent conversation
-  const lastConv = conversations[0];
-  if (lastConv && lastConv.title !== 'Nova conversa') {
-    const lastTitle = lastConv.title.length > 35
-      ? lastConv.title.substring(0, 35) + '...'
-      : lastConv.title;
-    messages.push({
-      title: `${greeting}, Senhor. Bem-vindo de volta.`,
-      sub: `Quer continuar "${lastTitle}"?`
-    });
-  }
-
-  // Check how many conversations today
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayConvs = conversations.filter(c => new Date(c.updatedAt) >= today);
-
-  if (todayConvs.length > 3) {
-    messages.push({
-      title: `${greeting}, Senhor. Dia produtivo hoje.`,
-      sub: `Já temos ${todayConvs.length} conversas hoje. Qual a próxima missão?`
-    });
-  }
-
-  // Generic returning user messages
-  messages.push(
-    { title: `${greeting}, Senhor. Bora acelerar?`, sub: 'O que precisamos resolver hoje?' },
-    { title: `Bem-vindo de volta, Senhor.`, sub: 'Qual missão vamos resolver hoje?' },
-    { title: `${greeting}, Senhor.`, sub: `Você tem ${conversations.length} conversa${conversations.length > 1 ? 's' : ''} salva${conversations.length > 1 ? 's' : ''}. Quer começar algo novo?` },
-    { title: `E aí, Senhor. O SENNA tá on.`, sub: 'No que posso ajudar agora?' }
-  );
-
-  // Time-specific messages
   if (hour >= 22 || hour < 5) {
-    messages.push({
-      title: `Trabalhando tarde, Senhor?`,
-      sub: 'Tô aqui pra o que precisar. Bora.'
-    });
+    greetings.push('Trabalhando tarde, Senhor? To aqui.');
   }
 
-  if (hour >= 6 && hour < 9) {
-    messages.push({
-      title: `${greeting}, Senhor. Café tomado?`,
-      sub: 'Vamos definir as prioridades do dia?'
-    });
-  }
-
-  // Pick random message from pool
-  const msg = messages[Math.floor(Math.random() * messages.length)];
-  welcomeTitle.textContent = msg.title;
-  welcomeSub.textContent = msg.sub;
+  perpetualGreeting.textContent = greetings[Math.floor(Math.random() * greetings.length)];
 }
 
 // ===== VERSION CHECK =====
@@ -2337,14 +2419,11 @@ function init() {
   }
   synthesis.getVoices();
 
-  // Load last conversation or start fresh
-  const lastId = ConversationManager.getActiveId();
-  if (lastId && ConversationManager.get(lastId)) {
-    loadConversation(lastId);
-  } else {
-    updateWelcomeScreen();
-    updateWelcomeMessage();
-  }
+  // Always start in perpetual mode
+  isSessionMode = false;
+  document.body.classList.remove('session-mode');
+  updatePerpetualGreeting();
+  if (!particlesRunning) startParticles();
 
   renderConversationList();
 }
