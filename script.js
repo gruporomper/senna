@@ -1053,6 +1053,37 @@ async function processCommand(text, fromVoice = false) {
 // ===== ELEVENLABS TTS =====
 // API keys are server-side only
 let currentAudio = null;
+let speakAudioCtx = null;
+let speakAnalyser = null;
+let speakAnimId = null;
+
+function animateSpeakingHelmet() {
+  if (!speakAnalyser || !currentAudio || currentAudio.paused) {
+    resetHelmetPulse();
+    return;
+  }
+  speakAnimId = requestAnimationFrame(animateSpeakingHelmet);
+  const bufferLength = speakAnalyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  speakAnalyser.getByteFrequencyData(dataArray);
+  let sum = 0;
+  for (let i = 0; i < bufferLength; i++) sum += dataArray[i];
+  const avg = sum / bufferLength / 255;
+  pulseHelmetWithAudio(avg);
+}
+
+function stopSpeakingAnimation() {
+  if (speakAnimId) {
+    cancelAnimationFrame(speakAnimId);
+    speakAnimId = null;
+  }
+  resetHelmetPulse();
+  if (speakAudioCtx) {
+    speakAudioCtx.close().catch(() => {});
+    speakAudioCtx = null;
+    speakAnalyser = null;
+  }
+}
 
 async function speak(text, onEnd) {
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
@@ -1090,14 +1121,31 @@ async function speak(text, onEnd) {
     audio.onended = () => {
       URL.revokeObjectURL(audioUrl);
       currentAudio = null;
+      stopSpeakingAnimation();
       if (onEnd) onEnd();
     };
     audio.onerror = () => {
       URL.revokeObjectURL(audioUrl);
       currentAudio = null;
+      stopSpeakingAnimation();
       if (onEnd) onEnd();
     };
-    audio.play();
+
+    // Connect to analyser for helmet pulse
+    try {
+      speakAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      speakAnalyser = speakAudioCtx.createAnalyser();
+      speakAnalyser.fftSize = 256;
+      const source = speakAudioCtx.createMediaElementSource(audio);
+      source.connect(speakAnalyser);
+      speakAnalyser.connect(speakAudioCtx.destination);
+    } catch(e) {
+      console.warn('Could not create speak analyser:', e);
+    }
+
+    audio.play().then(() => {
+      if (speakAnalyser) animateSpeakingHelmet();
+    }).catch(() => {});
   } catch (error) {
     console.error('ElevenLabs fetch error:', error);
     speakFallback(text, onEnd);
@@ -1180,6 +1228,7 @@ function startRecording() {
   if (currentState === 'thinking' || currentState === 'speaking') return;
 
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  stopSpeakingAnimation();
   synthesis.cancel();
 
   voiceTranscript = '';
@@ -1286,13 +1335,15 @@ function pulseHelmetWithAudio(amplitude) {
   // Glow intensity: stronger with louder voice
   const glowScale = 1 + amplitude * 0.4;
   const glowOpacity = 0.5 + amplitude * 0.5;
-  // Green glow intensity based on volume
-  const greenIntensity = Math.floor(30 + amplitude * 225);
-  const greenGlow = `drop-shadow(0 0 ${15 + amplitude * 35}px rgba(0, ${greenIntensity}, 58, ${0.4 + amplitude * 0.5})) drop-shadow(0 0 ${40 + amplitude * 40}px rgba(0, ${greenIntensity}, 58, ${0.15 + amplitude * 0.2}))`;
+  // Color based on state: green for listening, yellow for speaking
+  const isSpeaking = currentState === 'speaking';
+  const glowColor = isSpeaking
+    ? `drop-shadow(0 0 ${15 + amplitude * 35}px rgba(255, ${Math.floor(180 + amplitude * 75)}, 0, ${0.4 + amplitude * 0.5})) drop-shadow(0 0 ${40 + amplitude * 40}px rgba(255, 215, 0, ${0.15 + amplitude * 0.2}))`
+    : `drop-shadow(0 0 ${15 + amplitude * 35}px rgba(0, ${Math.floor(30 + amplitude * 225)}, 58, ${0.4 + amplitude * 0.5})) drop-shadow(0 0 ${40 + amplitude * 40}px rgba(0, ${Math.floor(30 + amplitude * 225)}, 58, ${0.15 + amplitude * 0.2}))`;
 
   helmets.forEach(h => {
     h.style.transform = `scale(${scale})`;
-    h.style.filter = greenGlow;
+    h.style.filter = glowColor;
   });
   glows.forEach(g => {
     g.style.transform = `scale(${glowScale})`;
@@ -1556,6 +1607,7 @@ messagesWrap.addEventListener('click', (e) => {
   } else if (action === 'speak') {
     if (currentState === 'speaking') {
       if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+      stopSpeakingAnimation();
       synthesis.cancel();
       setState('idle');
       btn.classList.remove('speaking');
@@ -1604,6 +1656,7 @@ function handleOrbClick() {
     sendRecording();
   } else if (currentState === 'speaking') {
     if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    stopSpeakingAnimation();
     synthesis.cancel();
     setState('idle');
   }

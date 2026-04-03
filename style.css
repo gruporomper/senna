@@ -1454,9 +1454,21 @@ body.state-speaking .orb-core {
     inset 0 -10px 30px rgba(0, 0, 0, 0.15), inset 0 5px 20px rgba(255, 255, 255, 0.4);
   animation: pulse 0.8s ease-in-out infinite;
 }
+body.state-speaking .helmet-svg {
+  filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.6)) drop-shadow(0 0 60px rgba(255, 215, 0, 0.25));
+  transition: transform 0.08s ease-out, filter 0.08s ease-out;
+}
 body.state-speaking .orb-glow {
   background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, transparent 65%);
-  animation: glow 0.8s ease-in-out infinite;
+  transition: transform 0.08s ease-out, opacity 0.08s ease-out;
+}
+body.state-speaking .orb-ring.ring-1 {
+  border-color: rgba(255, 215, 0, 0.4);
+  transition: transform 0.1s ease-out;
+}
+body.state-speaking .orb-ring.ring-2 {
+  border-color: rgba(255, 215, 0, 0.2);
+  transition: transform 0.12s ease-out;
 }
 body.state-speaking .orb-status { color: var(--yellow); }
 
