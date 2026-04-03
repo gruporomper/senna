@@ -868,7 +868,7 @@ function setState(state) {
     thinking: 'PENSANDO',
     speaking: 'FALANDO'
   };
-  orbStatus.textContent = labels[state] || '';
+  if (orbStatus) orbStatus.textContent = labels[state] || '';
 }
 
 // ===== CHAT =====
@@ -1150,11 +1150,7 @@ function initSpeechRecognition() {
 
 // ===== RECORDING UI =====
 function startRecording() {
-  console.log('[MIC] startRecording called, supported:', isRecognitionSupported, 'state:', currentState);
-  if (currentState === 'thinking' || currentState === 'speaking') {
-    console.warn('[MIC] Blocked: state=', currentState);
-    return;
-  }
+  if (currentState === 'thinking' || currentState === 'speaking') return;
 
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
   synthesis.cancel();
@@ -1165,7 +1161,6 @@ function startRecording() {
 
   // Show recording bar, hide input wrapper
   const iw = document.getElementById('inputWrapper');
-  console.log('[MIC] inputWrapper:', iw, 'recordingRow:', recordingRow);
   if (iw) iw.classList.add('hidden');
   if (recordingRow) recordingRow.classList.remove('hidden');
 
@@ -1173,13 +1168,12 @@ function startRecording() {
   if (isRecognitionSupported && recognition) {
     try {
       recognition.start();
-      console.log('[MIC] recognition.start() OK');
     } catch (e) {
-      console.error('[MIC] Recognition start error:', e);
+      console.error('Recognition start error:', e);
     }
   }
 
-  // Start waveform visualization (works even without recognition)
+  // Start waveform visualization
   startWaveform();
 }
 
@@ -1369,7 +1363,7 @@ micBtn.addEventListener('click', (e) => {
 cancelRecBtn.addEventListener('click', cancelRecording);
 sendRecBtn.addEventListener('click', sendRecording);
 
-orb.addEventListener('click', () => {
+function handleOrbClick() {
   if (currentState === 'idle') {
     startRecording();
   } else if (currentState === 'listening') {
@@ -1379,7 +1373,13 @@ orb.addEventListener('click', () => {
     synthesis.cancel();
     setState('idle');
   }
-});
+}
+
+orb.addEventListener('click', handleOrbClick);
+
+// Cockpit orb also activates voice
+const cockpitOrbEl = document.querySelector('.cockpit-orb-container .orb');
+if (cockpitOrbEl) cockpitOrbEl.addEventListener('click', handleOrbClick);
 
 // ===== SEARCH SYSTEM =====
 const searchOverlay = document.getElementById('searchOverlay');
@@ -1903,4 +1903,3 @@ function init() {
 }
 
 init();
-console.log('[SENNA] Init complete. Recognition supported:', isRecognitionSupported, 'micBtn:', !!micBtn, 'recordingRow:', !!recordingRow);
