@@ -784,21 +784,22 @@ function openSession(carryMessages = false) {
   isSessionMode = true;
   document.body.classList.add('session-mode');
 
-  // Create new conversation
-  const conv = ConversationManager.create();
-  activeConversationId = conv.id;
-  ConversationManager.setActiveId(conv.id);
+  // Defer conversation creation until first message
+  activeConversationId = null;
   conversationHistory = [{ role: 'system', content: buildSystemPrompt() }];
   messagesWrap.innerHTML = '';
 
   if (carryMessages) {
-    // Migrate perpetual messages to session
+    // Migrate perpetual messages to session — create conversation now since we have content
     const msgs = perpetualHistory.filter(m => m.role !== 'system');
-    msgs.forEach(m => {
-      conversationHistory.push(m);
-      addMessage(m.content, m.role, false);
-    });
     if (msgs.length > 0) {
+      const conv = ConversationManager.create();
+      activeConversationId = conv.id;
+      ConversationManager.setActiveId(conv.id);
+      msgs.forEach(m => {
+        conversationHistory.push(m);
+        addMessage(m.content, m.role, false);
+      });
       ConversationManager.save(activeConversationId, conversationHistory);
     }
   }
@@ -1296,6 +1297,8 @@ async function processCommand(text, fromVoice = false) {
     if (!activeConversationId) {
       const conv = ConversationManager.create();
       activeConversationId = conv.id;
+      ConversationManager.setActiveId(conv.id);
+      renderConversationList();
     }
 
     addMessage(text, 'user');
