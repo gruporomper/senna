@@ -1888,8 +1888,10 @@ body.mode-home .perpetual-greeting { display: none; }
 .box-voice-controls { display: none; }
 
 /* When voice engine is active, keep controls hidden and toolbar visible */
-body.voice-active .box-voice-controls { display: flex; }
-body.voice-active .controls { display: none; }
+body.voice-active .box-voice-controls { display: flex !important; }
+body.voice-active .controls,
+body.voice-active .input-wrapper,
+body.voice-active .recording-row { display: none !important; }
 
 /* --- Media Toolbar --- */
 .media-toolbar {
