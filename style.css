@@ -2073,6 +2073,106 @@ body.state-listening .input-row {
 .msg-edit-save { color: var(--green-light); }
 .msg-edit-cancel { color: var(--text-dim); }
 
+/* Model badge — small indicator on assistant messages */
+.model-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: rgba(255, 215, 0, 0.08);
+  border: 1px solid rgba(255, 215, 0, 0.12);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  cursor: default;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+.model-badge:hover {
+  opacity: 1;
+}
+
+/* Cost widget in dashboard */
+.cost-widget-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--green-light);
+  font-family: 'JetBrains Mono', monospace;
+}
+.cost-widget-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+.cost-details-btn {
+  font-size: 11px;
+  color: var(--yellow);
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-top: 8px;
+  opacity: 0.7;
+}
+.cost-details-btn:hover { opacity: 1; }
+
+/* Cost detail modal */
+.cost-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+.cost-modal-content {
+  background: var(--surface);
+  border: 1px solid rgba(255,215,0,0.15);
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 320px;
+  max-width: 420px;
+}
+.cost-modal-content h3 {
+  color: var(--yellow);
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+.cost-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.cost-row span:first-child {
+  color: var(--text-dim);
+  text-transform: capitalize;
+}
+.cost-row span:last-child {
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+}
+.cost-modal-close {
+  margin-top: 16px;
+  width: 100%;
+  padding: 8px;
+  background: rgba(255,215,0,0.1);
+  border: 1px solid rgba(255,215,0,0.2);
+  border-radius: 8px;
+  color: var(--yellow);
+  cursor: pointer;
+  font-size: 13px;
+}
+.cost-modal-close:hover {
+  background: rgba(255,215,0,0.15);
+}
+
 .msg-edit-input {
   width: 100%;
   min-height: 40px;
