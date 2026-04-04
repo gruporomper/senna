@@ -825,6 +825,8 @@ const canvas = document.getElementById('particles');
 const ctx = canvas.getContext('2d');
 const cockpitCanvas = document.getElementById('cockpitParticles');
 const cockpitCtx = cockpitCanvas ? cockpitCanvas.getContext('2d') : null;
+const sessionCanvas = document.getElementById('sessionParticles');
+const sessionCtx = sessionCanvas ? sessionCanvas.getContext('2d') : null;
 const attachBtn = document.getElementById('attachBtn');
 const attachMenu = document.getElementById('attachMenu');
 const attachCamera = document.getElementById('attachCamera');
@@ -1433,6 +1435,7 @@ function setAppMode(mode) {
     chatArea.style.display = 'none';
     if (sessionPrechatHero) sessionPrechatHero.style.display = 'flex';
     if (mainStripe) mainStripe.style.display = 'none';
+    if (!particlesRunning) startParticles();
   } else if (mode === 'session-active') {
     perpetualHome.style.display = 'none';
     cockpit.style.display = '';
@@ -1529,6 +1532,7 @@ function initParticles() {
   canvas.width = 300;
   canvas.height = 220;
   if (cockpitCanvas) { cockpitCanvas.width = 300; cockpitCanvas.height = 220; }
+  if (sessionCanvas) { sessionCanvas.width = 300; sessionCanvas.height = 220; }
   particles = [];
   for (let i = 0; i < 40; i++) {
     particles.push({
@@ -1549,6 +1553,7 @@ function animateParticles() {
   // Render on both canvases (active one will be visible)
   const targets = [{ c: canvas, x: ctx }];
   if (cockpitCanvas && cockpitCtx) targets.push({ c: cockpitCanvas, x: cockpitCtx });
+  if (sessionCanvas && sessionCtx) targets.push({ c: sessionCanvas, x: sessionCtx });
 
   const speed = currentState === 'idle' ? 1 : currentState === 'thinking' ? 3 : 2;
 
