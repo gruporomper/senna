@@ -1412,6 +1412,11 @@ const cockpitObjective = document.getElementById('cockpitObjective');
 function setAppMode(mode) {
   appMode = mode;
 
+  // Deactivate voice engine when leaving home/box mode
+  if (mode !== 'home' && window.VoiceEngine && window.VoiceEngine.state !== 'IDLE') {
+    window.VoiceEngine.deactivate();
+  }
+
   // Toggle mode-home class on body for CSS-driven visibility
   document.body.classList.toggle('mode-home', mode === 'home');
 
