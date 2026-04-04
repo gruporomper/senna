@@ -583,9 +583,11 @@ http.createServer(async (req, res) => {
       const body = await readBody(req);
       const postData = JSON.stringify(JSON.parse(body));
 
-      const apiReq = require('http').request({
-        hostname: 'localhost',
-        port: 8880,
+      const kokoroBase = process.env.KOKORO_URL || 'http://localhost:8880';
+      const kokoroParsed = new URL(kokoroBase);
+      const apiReq = (kokoroParsed.protocol === 'https:' ? https : http).request({
+        hostname: kokoroParsed.hostname,
+        port: kokoroParsed.port || (kokoroParsed.protocol === 'https:' ? 443 : 8880),
         path: '/v1/audio/speech',
         method: 'POST',
         headers: {
@@ -626,6 +628,60 @@ http.createServer(async (req, res) => {
         console.log('[DEPLOY] Success:', stdout);
       }
     });
+    return;
+  }
+
+  // ===== HEALTH CHECK: /api/health =====
+  if (req.url === '/api/health' && req.method === 'GET') {
+    const checks = {};
+    const errors = [];
+
+    // Check Ollama
+    const ollamaUrl = process.env.OLLAMA_URL;
+    if (ollamaUrl) {
+      try {
+        const ollamaOk = await new Promise((resolve) => {
+          const req = (ollamaUrl.startsWith('https') ? https : http).get(ollamaUrl, { timeout: 3000 }, (r) => {
+            resolve(r.statusCode < 500);
+          });
+          req.on('error', () => resolve(false));
+          req.on('timeout', () => { req.destroy(); resolve(false); });
+        });
+        checks.ollama = ollamaOk ? 'ok' : 'down';
+        if (!ollamaOk) errors.push('ollama');
+      } catch { checks.ollama = 'down'; errors.push('ollama'); }
+    } else {
+      checks.ollama = 'not_configured';
+    }
+
+    // Check Kokoro TTS
+    const kokoroUrl = process.env.KOKORO_URL || 'http://localhost:8880';
+    try {
+      const kokoroOk = await new Promise((resolve) => {
+        const req = http.get(kokoroUrl, { timeout: 3000 }, (r) => {
+          resolve(r.statusCode < 500);
+        });
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => { req.destroy(); resolve(false); });
+      });
+      checks.kokoro_tts = kokoroOk ? 'ok' : 'down';
+      if (!kokoroOk) errors.push('kokoro_tts');
+    } catch { checks.kokoro_tts = 'down'; errors.push('kokoro_tts'); }
+
+    // Check API keys
+    checks.grok = process.env.GROK_API_KEY ? 'configured' : 'missing';
+    checks.gemini = process.env.GEMINI_API_KEY ? 'configured' : 'missing';
+    checks.openai = process.env.OPENAI_API_KEY ? 'configured' : 'missing';
+    checks.claude = process.env.ANTHROPIC_API_KEY ? 'configured' : 'missing';
+
+    // Check Supabase
+    checks.supabase = process.env.SUPABASE_URL ? 'configured' : 'missing';
+
+    const status = errors.length === 0 ? 'healthy' : 'degraded';
+    const uptime = Math.floor((Date.now() - new Date(SERVER_START_TIME).getTime()) / 1000);
+
+    res.writeHead(status === 'healthy' ? 200 : 503, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ status, uptime, serverStart: SERVER_START_TIME, checks, errors }));
     return;
   }
 
