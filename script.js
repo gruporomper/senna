@@ -1595,7 +1595,11 @@ function startParticles() {
 // ===== STATE MANAGEMENT =====
 function setState(state) {
   currentState = state;
-  document.body.className = '';
+  // Preserve persistent classes (mode-home, voice-active) while swapping state-* class
+  const keep = [];
+  if (document.body.classList.contains('mode-home')) keep.push('mode-home');
+  if (document.body.classList.contains('voice-active')) keep.push('voice-active');
+  document.body.className = keep.join(' ');
   if (state !== 'idle') {
     document.body.classList.add(`state-${state}`);
   }
