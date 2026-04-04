@@ -1162,11 +1162,51 @@ document.querySelector('.helmet-icon')?.addEventListener('click', toggleSidebar)
 sidebarOverlay.addEventListener('click', closeSidebar);
 
 // ===== SESSION LIST RENDERING =====
+let _activeLabelFilter = null;
+
 function renderConversationList() {
   conversationListEl.innerHTML = '';
 
-  const pinned = SessionManager.getPinned();
-  const active = SessionManager.getActive();
+  let pinned = SessionManager.getPinned();
+  let active = SessionManager.getActive();
+
+  // --- Label filter bar ---
+  const allSessions = [...pinned, ...active];
+  const usedLabels = [];
+  const seen = new Set();
+  allSessions.forEach(s => {
+    if (s.label && !seen.has(s.label.name)) {
+      seen.add(s.label.name);
+      usedLabels.push(s.label);
+    }
+  });
+
+  if (usedLabels.length > 0) {
+    const filterBar = document.createElement('div');
+    filterBar.className = 'label-filter-bar';
+    const allBtn = document.createElement('button');
+    allBtn.className = 'label-filter-chip' + (!_activeLabelFilter ? ' active' : '');
+    allBtn.textContent = 'Todas';
+    allBtn.addEventListener('click', () => { _activeLabelFilter = null; renderConversationList(); });
+    filterBar.appendChild(allBtn);
+    usedLabels.forEach(label => {
+      const chip = document.createElement('button');
+      chip.className = 'label-filter-chip' + (_activeLabelFilter === label.name ? ' active' : '');
+      chip.innerHTML = `<span class="label-filter-dot" style="background:${label.color}"></span>${escapeHtml(label.name)}`;
+      chip.addEventListener('click', () => {
+        _activeLabelFilter = _activeLabelFilter === label.name ? null : label.name;
+        renderConversationList();
+      });
+      filterBar.appendChild(chip);
+    });
+    conversationListEl.appendChild(filterBar);
+  }
+
+  // Apply label filter
+  if (_activeLabelFilter) {
+    pinned = pinned.filter(s => s.label && s.label.name === _activeLabelFilter);
+    active = active.filter(s => s.label && s.label.name === _activeLabelFilter);
+  }
 
   // --- Fixadas section ---
   if (pinned.length > 0) {
@@ -1178,7 +1218,15 @@ function renderConversationList() {
     const pinnedContainer = document.createElement('div');
     pinnedContainer.className = 'pinned-list';
     pinnedContainer.id = 'pinnedList';
-    pinned.forEach(s => pinnedContainer.appendChild(_createSessionItem(s)));
+    pinned.forEach(s => {
+      const item = _createSessionItem(s);
+      item.draggable = true;
+      item.addEventListener('dragstart', _onDragStart);
+      item.addEventListener('dragover', _onDragOver);
+      item.addEventListener('dragend', _onDragEnd);
+      item.addEventListener('drop', _onDrop);
+      pinnedContainer.appendChild(item);
+    });
     conversationListEl.appendChild(pinnedContainer);
   }
 
@@ -1195,9 +1243,47 @@ function renderConversationList() {
   if (pinned.length === 0 && active.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'conv-list-empty';
-    empty.textContent = 'Nenhuma sessão';
+    empty.textContent = _activeLabelFilter ? 'Nenhuma sessão com esta etiqueta' : 'Nenhuma sessão';
     conversationListEl.appendChild(empty);
   }
+}
+
+// ===== DRAG-AND-DROP (Fixadas) =====
+let _draggedItem = null;
+
+function _onDragStart(e) {
+  _draggedItem = this;
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function _onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const target = e.target.closest('.conv-item[draggable]');
+  if (!target || target === _draggedItem) return;
+  const container = target.parentElement;
+  const items = [...container.children];
+  const dragIdx = items.indexOf(_draggedItem);
+  const targetIdx = items.indexOf(target);
+  if (dragIdx < targetIdx) {
+    container.insertBefore(_draggedItem, target.nextSibling);
+  } else {
+    container.insertBefore(_draggedItem, target);
+  }
+}
+
+function _onDrop(e) {
+  e.preventDefault();
+}
+
+function _onDragEnd() {
+  this.classList.remove('dragging');
+  const container = document.getElementById('pinnedList');
+  if (!container) return;
+  const orderedIds = [...container.children].map(el => el.dataset.sessionId);
+  SessionManager.reorderPinned(orderedIds);
+  _draggedItem = null;
 }
 
 function _createSessionItem(session) {
@@ -1209,7 +1295,18 @@ function _createSessionItem(session) {
     ? `<span class="session-label" style="background:${session.label.color}">${escapeHtml(session.label.name)}</span>`
     : '';
 
+  const dragHandle = session.isPinned
+    ? `<div class="drag-handle" title="Arrastar para reordenar">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+          <circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/>
+          <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+          <circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
+        </svg>
+      </div>`
+    : '';
+
   el.innerHTML = `
+    ${dragHandle}
     <div class="conv-item-text">
       <div class="conv-item-title">${escapeHtml(session.title)}${labelHtml}</div>
       <div class="conv-item-date">${SessionManager.formatDate(session.updatedAt)}</div>
@@ -1430,8 +1527,20 @@ function showLabelPicker(sessionId, anchorRect) {
       ${isActive ? '<span class="label-picker-check">✓</span>' : ''}
     </button>`;
   });
+  html += '<div class="conv-context-menu-separator"></div>';
+  html += `<div class="label-picker-custom">
+    <input type="text" class="label-picker-input" placeholder="Etiqueta personalizada" maxlength="20" />
+    <div class="label-picker-colors">
+      <button class="label-color-btn selected" data-color="#6b7280" style="background:#6b7280"></button>
+      <button class="label-color-btn" data-color="#ef4444" style="background:#ef4444"></button>
+      <button class="label-color-btn" data-color="#f59e0b" style="background:#f59e0b"></button>
+      <button class="label-color-btn" data-color="#10b981" style="background:#10b981"></button>
+      <button class="label-color-btn" data-color="#3b82f6" style="background:#3b82f6"></button>
+      <button class="label-color-btn" data-color="#8b5cf6" style="background:#8b5cf6"></button>
+      <button class="label-color-btn" data-color="#ec4899" style="background:#ec4899"></button>
+    </div>
+  </div>`;
   if (session.label) {
-    html += '<div class="conv-context-menu-separator"></div>';
     html += '<button class="label-picker-item label-picker-remove" data-name="__remove">Remover etiqueta</button>';
   }
   picker.innerHTML = html;
@@ -1446,6 +1555,29 @@ function showLabelPicker(sessionId, anchorRect) {
     if (r.right > window.innerWidth) picker.style.left = (window.innerWidth - r.width - 8) + 'px';
     if (r.bottom > window.innerHeight) picker.style.top = (anchorRect.top - r.height - 4) + 'px';
   });
+
+  // Custom label: color selection
+  let selectedCustomColor = '#6b7280';
+  picker.querySelectorAll('.label-color-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      picker.querySelectorAll('.label-color-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedCustomColor = btn.dataset.color;
+    });
+  });
+
+  // Custom label: submit on Enter
+  const customInput = picker.querySelector('.label-picker-input');
+  customInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && customInput.value.trim()) {
+      SessionManager.setLabel(sessionId, { name: customInput.value.trim(), color: selectedCustomColor });
+      picker.remove();
+      renderConversationList();
+    }
+    e.stopPropagation();
+  });
+  customInput.addEventListener('click', (e) => e.stopPropagation());
 
   picker.addEventListener('click', (e) => {
     const item = e.target.closest('[data-name]');
