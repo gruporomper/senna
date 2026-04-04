@@ -607,6 +607,81 @@ html, body {
   flex-shrink: 0;
 }
 
+/* Drive Sync Icon */
+.drive-sync-icon {
+  display: inline-block;
+  vertical-align: middle;
+  opacity: 0.4;
+  margin-right: 2px;
+}
+
+/* Drive Restore Panel */
+.drive-restore-panel {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 215, 0, 0.08);
+}
+
+.drive-restore-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 215, 0, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 0 6px;
+  font-family: 'Orbitron', sans-serif;
+}
+
+.drive-restore-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.drive-restore-item:hover {
+  background: rgba(255, 215, 0, 0.06);
+}
+
+.drive-restore-name {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drive-restore-date {
+  font-size: 10px;
+  color: var(--text-dim, rgba(255,255,255,0.3));
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.drive-restore-close {
+  width: 100%;
+  padding: 6px;
+  border: 1px solid rgba(255, 215, 0, 0.1);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim, rgba(255,255,255,0.4));
+  font-size: 11px;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: background 0.15s;
+}
+
+.drive-restore-close:hover {
+  background: rgba(255, 215, 0, 0.04);
+}
+
 /* Profile Button */
 .profile-btn {
   display: flex;

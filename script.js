@@ -959,6 +959,254 @@ const SessionManager = {
 // Backward compatibility alias
 const ConversationManager = SessionManager;
 
+// ===== GOOGLE DRIVE ADAPTER =====
+const DriveAdapter = {
+  FOLDER_NAME: 'SENNA Sessions',
+  MIME_JSON: 'application/json',
+  FOLDER_MIME: 'application/vnd.google-apps.folder',
+  _folderId: null,
+
+  async _getToken() {
+    if (!supabaseClient) return null;
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    return session?.provider_token || null;
+  },
+
+  async _headers() {
+    const token = await this._getToken();
+    if (!token) throw new Error('No Google token — re-auth required with Drive scope');
+    return { 'Authorization': `Bearer ${token}` };
+  },
+
+  async _ensureFolder() {
+    if (this._folderId) return this._folderId;
+    const headers = await this._headers();
+
+    // Search for existing folder
+    const q = `name='${this.FOLDER_NAME}' and mimeType='${this.FOLDER_MIME}' and trashed=false`;
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)`, { headers });
+    const data = await res.json();
+
+    if (data.files && data.files.length > 0) {
+      this._folderId = data.files[0].id;
+      return this._folderId;
+    }
+
+    // Create folder
+    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: this.FOLDER_NAME,
+        mimeType: this.FOLDER_MIME
+      })
+    });
+    const folder = await createRes.json();
+    this._folderId = folder.id;
+    return this._folderId;
+  },
+
+  async upload(sessionId) {
+    const payload = SessionManager.serialize(sessionId);
+    if (!payload) return null;
+
+    const folderId = await this._ensureFolder();
+    const headers = await this._headers();
+    const session = SessionManager.get(sessionId);
+    const fileName = `${session.title.replace(/[^a-zA-Z0-9À-ú ]/g, '_')}.senna.json`;
+
+    // Check if file already exists (update vs create)
+    if (session.driveFileId) {
+      // Update existing file
+      const updateRes = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${session.driveFileId}?uploadType=media`,
+        {
+          method: 'PATCH',
+          headers: { ...headers, 'Content-Type': this.MIME_JSON },
+          body: JSON.stringify(payload)
+        }
+      );
+      if (updateRes.ok) {
+        const file = await updateRes.json();
+        this._updateDriveMeta(sessionId, file.id);
+        console.log('[DRIVE] Updated:', file.id);
+        return file.id;
+      }
+    }
+
+    // Create new file (multipart upload)
+    const metadata = {
+      name: fileName,
+      parents: [folderId],
+      mimeType: this.MIME_JSON,
+      appProperties: {
+        sennaSessionId: sessionId,
+        sennaVersion: '1.0.0'
+      }
+    };
+
+    const boundary = 'senna_boundary_' + Date.now();
+    const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n--${boundary}\r\nContent-Type: ${this.MIME_JSON}\r\n\r\n${JSON.stringify(payload)}\r\n--${boundary}--`;
+
+    const createRes = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+      {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body
+      }
+    );
+
+    if (!createRes.ok) {
+      const err = await createRes.text();
+      console.error('[DRIVE] Upload failed:', err);
+      return null;
+    }
+
+    const file = await createRes.json();
+    this._updateDriveMeta(sessionId, file.id);
+    console.log('[DRIVE] Uploaded:', file.id);
+    return file.id;
+  },
+
+  _updateDriveMeta(sessionId, fileId) {
+    const all = SessionManager.getAll(true);
+    const s = all.find(x => x.id === sessionId);
+    if (s) {
+      s.driveFileId = fileId;
+      s.driveVersion = new Date().toISOString();
+      SessionManager.saveAll(all);
+    }
+  },
+
+  async download(fileId) {
+    const headers = await this._headers();
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers }
+    );
+    if (!res.ok) {
+      console.error('[DRIVE] Download failed:', res.status);
+      return null;
+    }
+    const json = await res.json();
+    return SessionManager.parse(json);
+  },
+
+  async listArchived() {
+    try {
+      const folderId = await this._ensureFolder();
+      const headers = await this._headers();
+      const q = `'${folderId}' in parents and trashed=false`;
+      const res = await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,appProperties,modifiedTime)&orderBy=modifiedTime desc&pageSize=50`,
+        { headers }
+      );
+      const data = await res.json();
+      return (data.files || []).map(f => ({
+        fileId: f.id,
+        name: f.name,
+        sessionId: f.appProperties?.sennaSessionId,
+        modifiedTime: f.modifiedTime
+      }));
+    } catch (e) {
+      console.error('[DRIVE] List failed:', e);
+      return [];
+    }
+  },
+
+  async restoreFromDrive(fileId) {
+    const sessionData = await this.download(fileId);
+    if (!sessionData) return null;
+    const imported = SessionManager.importSession(sessionData);
+    if (imported) {
+      const all = SessionManager.getAll(true);
+      const s = all.find(x => x.id === imported.id);
+      if (s) {
+        s.driveFileId = fileId;
+        SessionManager.saveAll(all);
+      }
+    }
+    return imported;
+  },
+
+  async isAvailable() {
+    try {
+      const token = await this._getToken();
+      return !!token;
+    } catch {
+      return false;
+    }
+  }
+};
+
+// ===== DRIVE UI =====
+(function initDriveUI() {
+  const driveBtn = document.getElementById('navDriveRestore');
+  if (!driveBtn) return;
+
+  // Show Drive button once token is available
+  setTimeout(async () => {
+    const available = await DriveAdapter.isAvailable();
+    if (available) {
+      driveBtn.style.display = '';
+    }
+  }, 2000);
+
+  driveBtn.addEventListener('click', async () => {
+    driveBtn.disabled = true;
+    driveBtn.querySelector('svg').style.opacity = '0.3';
+    try {
+      const files = await DriveAdapter.listArchived();
+      if (files.length === 0) {
+        alert('Nenhuma sessão encontrada no Google Drive.');
+        return;
+      }
+
+      // Show simple restore picker
+      const existing = document.querySelector('.drive-restore-panel');
+      if (existing) existing.remove();
+
+      const panel = document.createElement('div');
+      panel.className = 'drive-restore-panel';
+      let html = '<div class="drive-restore-title">Sessões no Drive</div>';
+      files.forEach(f => {
+        const name = f.name.replace('.senna.json', '');
+        const date = new Date(f.modifiedTime).toLocaleDateString('pt-BR');
+        html += `<button class="drive-restore-item" data-file-id="${f.fileId}">
+          <span class="drive-restore-name">${escapeHtml(name)}</span>
+          <span class="drive-restore-date">${date}</span>
+        </button>`;
+      });
+      html += '<button class="drive-restore-close">Fechar</button>';
+      panel.innerHTML = html;
+
+      panel.querySelector('.drive-restore-close').addEventListener('click', () => panel.remove());
+      panel.querySelectorAll('.drive-restore-item').forEach(item => {
+        item.addEventListener('click', async () => {
+          item.textContent = 'Restaurando...';
+          const session = await DriveAdapter.restoreFromDrive(item.dataset.fileId);
+          if (session) {
+            renderConversationList();
+            loadConversation(session.id);
+            panel.remove();
+          } else {
+            item.textContent = 'Erro ao restaurar';
+          }
+        });
+      });
+
+      conversationListEl.parentElement.insertBefore(panel, conversationListEl);
+    } catch (e) {
+      console.error('[DRIVE] Restore UI error:', e);
+      alert('Erro ao acessar Google Drive. Verifique se você autorizou o acesso.');
+    } finally {
+      driveBtn.disabled = false;
+      driveBtn.querySelector('svg').style.opacity = '';
+    }
+  });
+})();
+
 // ===== MEMORY BANK =====
 const MemoryBank = {
   STORAGE_KEY: 'senna_memories',
@@ -1357,7 +1605,7 @@ function _createSessionItem(session) {
     ${dragHandle}
     <div class="conv-item-text">
       <div class="conv-item-title">${escapeHtml(session.title)}${labelHtml}</div>
-      <div class="conv-item-date">${SessionManager.formatDate(session.updatedAt)}</div>
+      <div class="conv-item-date">${session.driveFileId ? '<svg class="drive-sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg> ' : ''}${SessionManager.formatDate(session.updatedAt)}</div>
     </div>
     <button class="conv-item-menu-btn" title="Opções">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -1524,6 +1772,10 @@ function showConvContextMenu(event, session) {
           if (!session.summary) {
             SessionManager.generateSummary(session.id);
           }
+          // Upload to Drive in background
+          DriveAdapter.isAvailable().then(ok => {
+            if (ok) DriveAdapter.upload(session.id).catch(e => console.warn('[DRIVE] Upload skipped:', e.message));
+          });
           if (session.id === activeConversationId) {
             newChat();
           }

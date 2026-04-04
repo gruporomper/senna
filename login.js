@@ -46,7 +46,8 @@ document.getElementById('googleSignIn').addEventListener('click', async () => {
   const { data, error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: window.location.origin
+      redirectTo: window.location.origin,
+      scopes: 'https://www.googleapis.com/auth/drive.file'
     }
   });
 
