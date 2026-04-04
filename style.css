@@ -1892,6 +1892,7 @@ body.voice-active .box-voice-controls { display: flex !important; }
 body.voice-active .controls,
 body.voice-active .input-wrapper,
 body.voice-active .recording-row { display: none !important; }
+body.voice-active .chat-area { display: none !important; }
 
 /* --- Media Toolbar --- */
 .media-toolbar {
