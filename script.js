@@ -2848,6 +2848,12 @@ document.getElementById('boxMicBtn')?.addEventListener('click', handleOrbClick);
     if (window.VoiceEngine) window.VoiceEngine.togglePause();
   });
 
+  // Stop / End conversation
+  const stopBtn = document.getElementById('mediaStopBtn');
+  stopBtn?.addEventListener('click', () => {
+    if (window.VoiceEngine) window.VoiceEngine.deactivate();
+  });
+
   // Speed cycling
   speedBtn?.addEventListener('click', () => {
     speedIdx = (speedIdx + 1) % speeds.length;

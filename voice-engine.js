@@ -1219,6 +1219,8 @@
       this._updateCockpitState('LISTENING');
       const pauseBtn = document.getElementById('mediaPauseBtn');
       if (pauseBtn) pauseBtn.disabled = false;
+      const stopBtn = document.getElementById('mediaStopBtn');
+      if (stopBtn) stopBtn.disabled = false;
     },
 
     _hideRecordingUI() {
@@ -1232,6 +1234,8 @@
         pauseBtn.querySelector('.icon-pause')?.classList.remove('hidden');
         pauseBtn.querySelector('.icon-play')?.classList.add('hidden');
       }
+      const stopBtn = document.getElementById('mediaStopBtn');
+      if (stopBtn) stopBtn.disabled = true;
       this.paused = false;
       this.pausedState = null;
     },

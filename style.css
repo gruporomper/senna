@@ -1892,7 +1892,8 @@ body.voice-active .box-voice-controls { display: flex !important; }
 body.voice-active .controls,
 body.voice-active .input-wrapper,
 body.voice-active .recording-row { display: none !important; }
-body.voice-active .chat-area { display: none !important; }
+body.voice-active .chat-area,
+body.voice-active .perpetual-messages { display: none !important; }
 
 /* --- Media Toolbar --- */
 .media-toolbar {
@@ -2009,6 +2010,20 @@ body.state-speaking .media-btn-mic {
 .media-btn.paused {
   color: #FFB400;
   background: rgba(255, 180, 0, 0.1);
+}
+
+/* Stop button — red accent */
+.media-btn-stop {
+  color: #FF4444;
+  border-color: rgba(255, 68, 68, 0.25) !important;
+  background: rgba(255, 68, 68, 0.06);
+}
+.media-btn-stop:hover {
+  background: rgba(255, 68, 68, 0.15);
+  box-shadow: 0 0 14px rgba(255, 68, 68, 0.15);
+}
+.media-btn-stop:disabled {
+  opacity: 0.15;
 }
 
 @keyframes pulse-mic {
