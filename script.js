@@ -3,6 +3,246 @@
 
 const GROK_MODEL = 'grok-3-mini-fast'; // legacy fallback
 
+// ===== SUPABASE DATA LAYER =====
+let supabaseClient = null;
+let currentUserId = null;
+
+async function initSupabase() {
+  try {
+    const res = await fetch('/api/config');
+    const config = await res.json();
+    if (!config.supabaseUrl || !config.supabaseKey) return;
+    supabaseClient = window.supabase.createClient(config.supabaseUrl, config.supabaseKey);
+    // Check for existing session
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session?.user) {
+      currentUserId = session.user.id;
+      console.log('[SUPABASE] Authenticated:', currentUserId);
+      // Sync localStorage to Supabase in background
+      syncLocalToSupabase();
+    }
+    // Listen for auth changes
+    supabaseClient.auth.onAuthStateChange((event, session) => {
+      currentUserId = session?.user?.id || null;
+      if (event === 'SIGNED_IN') syncLocalToSupabase();
+    });
+  } catch (err) {
+    console.error('[SUPABASE] Init failed:', err.message);
+  }
+}
+
+const SennaDB = {
+  // ===== NOTES =====
+  async getNotes() {
+    if (supabaseClient && currentUserId) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('notes').select('*')
+          .eq('user_id', currentUserId)
+          .order('created_at', { ascending: false });
+        if (!error && data) {
+          // Update localStorage cache
+          const local = data.map(n => ({ text: n.content, date: n.created_at, id: n.id, source: n.source }));
+          localStorage.setItem('senna_notes', JSON.stringify(local));
+          return local;
+        }
+      } catch (e) { console.error('[DB] getNotes error:', e); }
+    }
+    return JSON.parse(localStorage.getItem('senna_notes') || '[]');
+  },
+
+  async addNote(text, source = 'assistant') {
+    // Always write to localStorage first (fast)
+    const notes = JSON.parse(localStorage.getItem('senna_notes') || '[]');
+    const localNote = { text, date: new Date().toISOString(), source };
+    notes.unshift(localNote);
+    localStorage.setItem('senna_notes', JSON.stringify(notes));
+    loadDashNotes();
+
+    // Then sync to Supabase
+    if (supabaseClient && currentUserId) {
+      try {
+        const { data } = await supabaseClient.from('notes').insert({
+          user_id: currentUserId, content: text, source
+        }).select().single();
+        if (data) localNote.id = data.id;
+      } catch (e) { console.error('[DB] addNote sync error:', e); }
+    }
+    return localNote;
+  },
+
+  // ===== TASKS =====
+  async getTasks() {
+    if (supabaseClient && currentUserId) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('tasks').select('*')
+          .eq('user_id', currentUserId)
+          .order('created_at', { ascending: false });
+        if (!error && data) {
+          const local = data.map(t => ({
+            text: t.content, done: t.completed, date: t.created_at,
+            id: t.id, priority: t.priority
+          }));
+          localStorage.setItem('senna_tasks', JSON.stringify(local));
+          return local;
+        }
+      } catch (e) { console.error('[DB] getTasks error:', e); }
+    }
+    return JSON.parse(localStorage.getItem('senna_tasks') || '[]');
+  },
+
+  async addTask(text, source = 'assistant') {
+    const tasks = JSON.parse(localStorage.getItem('senna_tasks') || '[]');
+    const localTask = { text, done: false, date: new Date().toISOString(), source };
+    tasks.unshift(localTask);
+    localStorage.setItem('senna_tasks', JSON.stringify(tasks));
+    loadDashTasks();
+
+    if (supabaseClient && currentUserId) {
+      try {
+        const { data } = await supabaseClient.from('tasks').insert({
+          user_id: currentUserId, content: text, source
+        }).select().single();
+        if (data) localTask.id = data.id;
+      } catch (e) { console.error('[DB] addTask sync error:', e); }
+    }
+    return localTask;
+  },
+
+  async toggleTask(index) {
+    const tasks = JSON.parse(localStorage.getItem('senna_tasks') || '[]');
+    if (tasks[index]) {
+      tasks[index].done = !tasks[index].done;
+      localStorage.setItem('senna_tasks', JSON.stringify(tasks));
+      loadDashTasks();
+
+      if (supabaseClient && currentUserId && tasks[index].id) {
+        try {
+          await supabaseClient.from('tasks').update({
+            completed: tasks[index].done,
+            completed_at: tasks[index].done ? new Date().toISOString() : null
+          }).eq('id', tasks[index].id);
+        } catch (e) { console.error('[DB] toggleTask sync error:', e); }
+      }
+    }
+  },
+
+  // ===== MEMORIES =====
+  async getMemories(count = 5) {
+    if (supabaseClient && currentUserId) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('memories').select('*')
+          .eq('user_id', currentUserId)
+          .order('created_at', { ascending: false })
+          .limit(count);
+        if (!error && data) {
+          const local = data.map(m => ({
+            id: m.id, summary: m.summary, insights: m.insights || [],
+            decisions: m.decisions || [], todos: m.todos || [],
+            tags: m.tags || [], createdAt: m.created_at,
+            sourceConvId: m.source_conv_id, sourceTitle: m.source_title
+          }));
+          return local;
+        }
+      } catch (e) { console.error('[DB] getMemories error:', e); }
+    }
+    return MemoryBank.getRecent(count);
+  },
+
+  async addMemory(memory) {
+    // Always write to localStorage
+    MemoryBank.add(memory);
+
+    if (supabaseClient && currentUserId) {
+      try {
+        await supabaseClient.from('memories').insert({
+          user_id: currentUserId,
+          content: memory.summary || '',
+          summary: memory.summary || '',
+          source_conv_id: memory.sourceConvId || null,
+          source_title: memory.sourceTitle || null,
+          insights: memory.insights || [],
+          decisions: memory.decisions || [],
+          todos: memory.todos || [],
+          tags: memory.tags || []
+        });
+      } catch (e) { console.error('[DB] addMemory sync error:', e); }
+    }
+    return memory;
+  },
+
+  // ===== CONVERSATIONS =====
+  // Note: conversation sync deferred — local IDs (conv_timestamp) don't match Supabase UUID format.
+  // Will be implemented when ConversationManager migrates to UUIDs.
+  async saveConversation(id, messages) {
+    ConversationManager.save(id, messages);
+  }
+};
+
+// One-time sync: push localStorage data to Supabase for existing users
+async function syncLocalToSupabase() {
+  if (!supabaseClient || !currentUserId) return;
+  console.log('[SYNC] Starting localStorage → Supabase sync...');
+
+  // Sync notes
+  const localNotes = JSON.parse(localStorage.getItem('senna_notes') || '[]');
+  if (localNotes.length > 0) {
+    const { data: existing } = await supabaseClient
+      .from('notes').select('id').eq('user_id', currentUserId).limit(1);
+    if (!existing || existing.length === 0) {
+      const rows = localNotes.map(n => ({
+        user_id: currentUserId, content: n.text, source: n.source || 'manual',
+        created_at: n.date || new Date().toISOString()
+      }));
+      await supabaseClient.from('notes').insert(rows).then(({ error }) => {
+        if (error) console.error('[SYNC] Notes error:', error.message);
+        else console.log(`[SYNC] ${rows.length} notes synced`);
+      });
+    }
+  }
+
+  // Sync tasks
+  const localTasks = JSON.parse(localStorage.getItem('senna_tasks') || '[]');
+  if (localTasks.length > 0) {
+    const { data: existing } = await supabaseClient
+      .from('tasks').select('id').eq('user_id', currentUserId).limit(1);
+    if (!existing || existing.length === 0) {
+      const rows = localTasks.map(t => ({
+        user_id: currentUserId, content: t.text, completed: t.done || false,
+        source: t.source || 'manual', created_at: t.date || new Date().toISOString()
+      }));
+      await supabaseClient.from('tasks').insert(rows).then(({ error }) => {
+        if (error) console.error('[SYNC] Tasks error:', error.message);
+        else console.log(`[SYNC] ${rows.length} tasks synced`);
+      });
+    }
+  }
+
+  // Sync memories
+  const localMemories = JSON.parse(localStorage.getItem('senna_memories') || '[]');
+  if (localMemories.length > 0) {
+    const { data: existing } = await supabaseClient
+      .from('memories').select('id').eq('user_id', currentUserId).limit(1);
+    if (!existing || existing.length === 0) {
+      const rows = localMemories.map(m => ({
+        user_id: currentUserId, content: m.summary || '',
+        summary: m.summary || '', source_conv_id: m.sourceConvId || null,
+        source_title: m.sourceTitle || null, insights: m.insights || [],
+        decisions: m.decisions || [], todos: m.todos || [],
+        tags: m.tags || [], created_at: m.createdAt || new Date().toISOString()
+      }));
+      await supabaseClient.from('memories').insert(rows).then(({ error }) => {
+        if (error) console.error('[SYNC] Memories error:', error.message);
+        else console.log(`[SYNC] ${rows.length} memories synced`);
+      });
+    }
+  }
+
+  console.log('[SYNC] Complete');
+}
+
 // Model prefix commands (parsed client-side for UI, actual routing is server-side)
 const MODEL_PREFIXES = {
   '/grok': { provider: 'grok', model: 'grok-3-mini-fast', label: 'Grok' },
@@ -502,7 +742,7 @@ async function extractMemory(conversationId) {
     parsed = { summary: raw.substring(0, 200), insights: [], decisions: [], todos: [], tags: [] };
   }
 
-  return MemoryBank.add({
+  return SennaDB.addMemory({
     id: 'mem_' + Date.now(),
     sourceConvId: conv.id,
     sourceTitle: conv.title,
@@ -2264,20 +2504,13 @@ messagesWrap.addEventListener('click', (e) => {
     }
   } else if (action === 'save-note') {
     const noteText = rawText.substring(0, 300);
-    const notes = JSON.parse(localStorage.getItem('senna_notes') || '[]');
-    notes.unshift({ text: noteText, date: new Date().toISOString() });
-    localStorage.setItem('senna_notes', JSON.stringify(notes));
-    loadDashNotes();
+    SennaDB.addNote(noteText, 'assistant');
     SennaMetrics.track('note_saved');
     showToast('Salvo nas notas');
   } else if (action === 'save-task') {
-    // Extract first meaningful line as task
     const lines = rawText.split('\n').filter(l => l.trim());
     const taskText = lines[0]?.substring(0, 150) || rawText.substring(0, 150);
-    const tasks = JSON.parse(localStorage.getItem('senna_tasks') || '[]');
-    tasks.push({ text: taskText, done: false, date: new Date().toISOString() });
-    localStorage.setItem('senna_tasks', JSON.stringify(tasks));
-    loadDashTasks();
+    SennaDB.addTask(taskText, 'assistant');
     SennaMetrics.track('task_saved');
     showToast('Tarefa criada');
   }
@@ -3060,17 +3293,11 @@ function loadDashNotes() {
 
 // Public functions to add tasks/notes from SENNA conversation
 function addSennaTask(text) {
-  const tasks = JSON.parse(localStorage.getItem('senna_tasks') || '[]');
-  tasks.unshift({ text, done: false, created: Date.now() });
-  localStorage.setItem('senna_tasks', JSON.stringify(tasks));
-  loadDashTasks();
+  SennaDB.addTask(text, 'manual');
 }
 
 function addSennaNote(text) {
-  const notes = JSON.parse(localStorage.getItem('senna_notes') || '[]');
-  notes.unshift({ text, created: Date.now() });
-  localStorage.setItem('senna_notes', JSON.stringify(notes));
-  loadDashNotes();
+  SennaDB.addNote(text, 'manual');
 }
 
 // ===== VERSION CHECK =====
@@ -3142,6 +3369,9 @@ function init() {
   if (!particlesRunning) startParticles();
 
   renderConversationList();
+
+  // Initialize Supabase data layer (async, non-blocking)
+  initSupabase();
 }
 
 init();
