@@ -3661,8 +3661,8 @@ async function checkVersion() {
     else if (diffHr < 24) timeAgo = `${diffHr}h atrás`;
     else timeAgo = `${diffDay}d atrás`;
 
-    text.textContent = `box ${data.hash} · ${timeAgo}`;
-    badge.title = `Telemetria SENNA\nBox: ${data.message}\nHash: ${data.hash}\nData: ${commitDate.toLocaleString('pt-BR')}\nMotor ligado: ${new Date(data.serverStart).toLocaleString('pt-BR')}`;
+    text.textContent = `telemetria ${data.hash} · ${timeAgo}`;
+    badge.title = `Telemetria SENNA\nCommit: ${data.message}\nHash: ${data.hash}\nData: ${commitDate.toLocaleString('pt-BR')}\nMotor ligado: ${new Date(data.serverStart).toLocaleString('pt-BR')}`;
   } catch (err) {
     dot.classList.remove('checking');
     dot.classList.add('error');
