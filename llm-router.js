@@ -313,6 +313,146 @@ function makeRequest(config) {
   });
 }
 
+// ===== STREAMING REQUEST =====
+function makeStreamingRequest(config, onChunk) {
+  return new Promise((resolve, reject) => {
+    const transport = config.protocol === 'https' ? https : http;
+    const reqOptions = {
+      hostname: config.hostname,
+      port: config.port,
+      path: config.path,
+      method: config.method,
+      headers: {
+        ...config.headers,
+        'Content-Length': Buffer.byteLength(config.body)
+      }
+    };
+
+    const req = transport.request(reqOptions, (res) => {
+      if (res.statusCode >= 400) {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => reject(new Error(`HTTP ${res.statusCode}: ${data.substring(0, 200)}`)));
+        return;
+      }
+
+      let fullContent = '';
+      let buffer = '';
+
+      res.on('data', (chunk) => {
+        buffer += chunk.toString();
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(data);
+            const token = config.parseStreamChunk(parsed);
+            if (token) {
+              fullContent += token;
+              onChunk(token);
+            }
+          } catch { /* skip unparseable chunks */ }
+        }
+      });
+
+      res.on('end', () => {
+        resolve({ content: fullContent, usage: { input_tokens: 0, output_tokens: 0 } });
+      });
+    });
+
+    req.on('error', reject);
+    req.setTimeout(60000, () => { req.destroy(); reject(new Error('Stream timeout (60s)')); });
+    req.write(config.body);
+    req.end();
+  });
+}
+
+// Build streaming config for each provider
+function buildStreamConfig(providerName, messages, model, env) {
+  const provider = PROVIDERS[providerName];
+  const config = provider.buildRequest(messages, model, env);
+
+  // Override body to enable streaming
+  const bodyObj = JSON.parse(config.body);
+  bodyObj.stream = true;
+  config.body = JSON.stringify(bodyObj);
+
+  // Add stream chunk parser based on provider
+  if (providerName === 'grok' || providerName === 'openai') {
+    config.parseStreamChunk = (parsed) =>
+      parsed.choices?.[0]?.delta?.content || '';
+  } else if (providerName === 'gemini') {
+    // Gemini streaming uses different endpoint
+    config.path = config.path.replace(':generateContent', ':streamGenerateContent');
+    // Gemini SSE format
+    config.parseStreamChunk = (parsed) =>
+      parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  } else if (providerName === 'claude') {
+    config.parseStreamChunk = (parsed) => {
+      if (parsed.type === 'content_block_delta') {
+        return parsed.delta?.text || '';
+      }
+      return '';
+    };
+  } else if (providerName === 'ollama') {
+    // Ollama streams JSON objects line by line (not SSE)
+    config.parseStreamChunk = (parsed) =>
+      parsed.message?.content || '';
+  }
+
+  return config;
+}
+
+// Stream router — tries providers in order, streams first success
+async function routeMessageStream(messages, env, options, onChunk) {
+  const { forceProvider, forceModel } = options;
+
+  let route;
+  if (forceProvider) {
+    const provider = PROVIDERS[forceProvider];
+    if (!provider) throw new Error(`Unknown provider: ${forceProvider}`);
+    const model = forceModel || provider.defaultModel;
+    route = [{ provider: forceProvider, model }];
+  } else {
+    const complexity = classifyComplexity(messages);
+    route = ROUTING[complexity].filter(r =>
+      isProviderAvailable(r.provider, env) && isProviderHealthy(r.provider)
+    );
+    if (route.length === 0) throw new Error('No LLM providers available');
+  }
+
+  let lastError;
+  for (const { provider: provName, model } of route) {
+    try {
+      console.log(`[ROUTER/STREAM] Trying ${provName}/${model}...`);
+      const config = buildStreamConfig(provName, messages, model, env);
+      const result = await makeStreamingRequest(config, onChunk);
+      const cost = estimateCost(model, result.usage.input_tokens, result.usage.output_tokens);
+
+      console.log(`[ROUTER/STREAM] Success: ${provName}/${model}`);
+      return {
+        content: result.content,
+        provider: provName,
+        model,
+        usage: result.usage,
+        cost,
+        complexity: classifyComplexity(messages)
+      };
+    } catch (err) {
+      console.error(`[ROUTER/STREAM] ${provName}/${model} failed:`, err.message);
+      markProviderDown(provName);
+      lastError = err;
+    }
+  }
+
+  throw new Error(`All providers failed. Last error: ${lastError?.message}`);
+}
+
 // ===== ESTIMATE COST =====
 function estimateCost(model, inputTokens, outputTokens) {
   const pricing = PRICING[model] || { input: 0, output: 0 };
@@ -398,6 +538,7 @@ function parsePrefix(text) {
 
 module.exports = {
   routeMessage,
+  routeMessageStream,
   parsePrefix,
   classifyComplexity,
   estimateCost,

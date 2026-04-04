@@ -1787,6 +1787,102 @@ async function callGrokAPI(userMessage, forceProvider = null, forceModel = null,
   return assistantMessage;
 }
 
+// ===== STREAMING LLM CALL =====
+async function callGrokAPIStream(userMessage, targetElement, forceProvider = null, forceModel = null, confirmed = false) {
+  const history = appMode !== 'home' ? conversationHistory : perpetualHistory;
+  if (!confirmed) {
+    history.push({ role: 'user', content: userMessage });
+  }
+
+  if (history.length > 21) {
+    const system = history[0];
+    const recent = history.slice(-20);
+    history.length = 0;
+    history.push(system, ...recent);
+  }
+
+  const payload = { messages: history, stream: true };
+  if (forceProvider) payload.forceProvider = forceProvider;
+  if (forceModel) payload.forceModel = forceModel;
+  if (confirmed) payload.confirmed = true;
+
+  const response = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  // Handle 202: budget confirmation required
+  if (response.status === 202) {
+    const data = await response.json();
+    const senna = data._senna;
+    const userConfirmed = await showBudgetConfirmModal(senna);
+    if (userConfirmed) {
+      return callGrokAPIStream(userMessage, targetElement, forceProvider, forceModel, true);
+    } else {
+      history.pop();
+      throw new Error('__BUDGET_DECLINED__');
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`Erro na API: ${response.status}`);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullContent = '';
+  let buffer = '';
+  const contentEl = targetElement.querySelector('.msg-content');
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try {
+        const data = JSON.parse(line.slice(6));
+        if (data.token) {
+          fullContent += data.token;
+          if (contentEl) {
+            contentEl.innerHTML = formatMessage(fullContent, 'assistant');
+          }
+          // Auto-scroll
+          const scrollArea = appMode !== 'home' ? chatArea : document.querySelector('.perpetual-messages');
+          if (scrollArea) scrollArea.scrollTop = scrollArea.scrollHeight;
+        }
+        if (data.done) {
+          lastLLMResponse = data._senna || null;
+          if (data._senna?.budgetWarning) {
+            showToast(data._senna.budgetWarning, 'warning');
+          }
+        }
+        if (data.error) {
+          throw new Error(data.error);
+        }
+      } catch (e) {
+        if (e.message && !e.message.includes('JSON')) throw e;
+      }
+    }
+  }
+
+  history.push({ role: 'assistant', content: fullContent });
+  targetElement.dataset.rawText = fullContent;
+
+  if (appMode !== 'home') {
+    conversationHistory = history;
+  } else {
+    perpetualHistory = history;
+  }
+
+  return fullContent;
+}
+
 // ===== BUDGET CONFIRMATION MODAL =====
 function showBudgetConfirmModal(senna) {
   return new Promise((resolve) => {
@@ -1876,9 +1972,22 @@ async function processCommand(text, fromVoice = false) {
     setState('thinking');
 
     try {
-      const response = await callGrokAPI(actualText, forceProvider, forceModel);
-      addMessage(response, 'assistant');
-      appendModelBadge(messagesWrap.lastElementChild);
+      // Create empty assistant message placeholder for streaming
+      addMessage('', 'assistant', false);
+      const msgElement = messagesWrap.lastElementChild;
+
+      const response = await callGrokAPIStream(actualText, msgElement, forceProvider, forceModel);
+      appendModelBadge(msgElement);
+
+      // Save conversation after streaming completes
+      if (activeConversationId) {
+        ConversationManager.save(activeConversationId, conversationHistory);
+        renderConversationList();
+        const conv = ConversationManager.get(activeConversationId);
+        if (conv && !conv.titleLocked && cockpitTitle) {
+          cockpitTitle.value = conv.title;
+        }
+      }
 
       if (fromVoice) {
         setState('speaking');
@@ -1889,9 +1998,22 @@ async function processCommand(text, fromVoice = false) {
     } catch (error) {
       console.error('Error:', error);
       if (error.message === '__BUDGET_DECLINED__') {
+        // Remove the empty placeholder
+        const lastMsg = messagesWrap.lastElementChild;
+        if (lastMsg && lastMsg.classList.contains('assistant') && !lastMsg.dataset.rawText) {
+          lastMsg.remove();
+        }
         showToast('Consulta cancelada pelo limite de custo.', 'warning');
       } else {
-        addMessage('Erro ao conectar com a IA. Verifique a conexão.', 'assistant');
+        // Update the placeholder with error message
+        const lastMsg = messagesWrap.lastElementChild;
+        if (lastMsg && lastMsg.classList.contains('assistant')) {
+          const contentEl = lastMsg.querySelector('.msg-content');
+          if (contentEl) contentEl.innerHTML = formatMessage('Erro ao conectar com a IA. Verifique a conexão.', 'assistant');
+          lastMsg.dataset.rawText = 'Erro ao conectar com a IA. Verifique a conexão.';
+        } else {
+          addMessage('Erro ao conectar com a IA. Verifique a conexão.', 'assistant');
+        }
       }
       setState('idle');
     }
@@ -1901,9 +2023,12 @@ async function processCommand(text, fromVoice = false) {
     setState('thinking');
 
     try {
-      const response = await callGrokAPI(actualText, forceProvider, forceModel);
-      addPerpetualMessage(response, 'assistant');
-      appendModelBadge(perpetualMessages.lastElementChild);
+      // Create empty assistant message placeholder for streaming
+      addPerpetualMessage('', 'assistant');
+      const msgElement = perpetualMessages.lastElementChild;
+
+      const response = await callGrokAPIStream(actualText, msgElement, forceProvider, forceModel);
+      appendModelBadge(msgElement);
 
       // Check if response is complex enough to suggest a session
       const shouldSuggest = response.length > 500 || (response.match(/```/g) || []).length >= 2 || (response.match(/^\d+\./gm) || []).length >= 5;
@@ -1928,9 +2053,20 @@ async function processCommand(text, fromVoice = false) {
     } catch (error) {
       console.error('Error:', error);
       if (error.message === '__BUDGET_DECLINED__') {
+        const lastMsg = perpetualMessages.lastElementChild;
+        if (lastMsg && lastMsg.classList.contains('assistant') && !lastMsg.dataset.rawText) {
+          lastMsg.remove();
+        }
         showToast('Consulta cancelada pelo limite de custo.', 'warning');
       } else {
-        addPerpetualMessage('Erro ao conectar com o Grok. Verifique a conexão.', 'assistant');
+        const lastMsg = perpetualMessages.lastElementChild;
+        if (lastMsg && lastMsg.classList.contains('assistant')) {
+          const contentEl = lastMsg.querySelector('.msg-content');
+          if (contentEl) contentEl.innerHTML = formatMessage('Erro ao conectar com o Grok. Verifique a conexão.', 'assistant');
+          lastMsg.dataset.rawText = 'Erro ao conectar com o Grok. Verifique a conexão.';
+        } else {
+          addPerpetualMessage('Erro ao conectar com o Grok. Verifique a conexão.', 'assistant');
+        }
       }
       setState('idle');
     }

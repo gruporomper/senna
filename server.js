@@ -3,7 +3,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
-const { routeMessage, parsePrefix, classifyComplexity, estimateCost } = require('./llm-router');
+const { routeMessage, routeMessageStream, parsePrefix, classifyComplexity, estimateCost } = require('./llm-router');
 const memory = require('./memory-engine');
 
 // Load .env
@@ -254,7 +254,6 @@ http.createServer(async (req, res) => {
               process.env
             );
             if (memCtx.context && memCtx.memoriesUsed > 0) {
-              // Append memory context to system prompt
               const sysIdx = enrichedMessages.findIndex(m => m.role === 'system');
               if (sysIdx >= 0) {
                 enrichedMessages[sysIdx] = {
@@ -270,18 +269,62 @@ http.createServer(async (req, res) => {
         }
       }
 
+      // ===== STREAMING MODE =====
+      if (parsed.stream) {
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*'
+        });
+
+        try {
+          const result = await routeMessageStream(enrichedMessages, process.env, {
+            forceProvider: forceProvider || null,
+            forceModel: forceModel || null
+          }, (token) => {
+            res.write(`data: ${JSON.stringify({ token })}\n\n`);
+          });
+
+          // Send final metadata event
+          res.write(`data: ${JSON.stringify({
+            done: true,
+            _senna: {
+              provider: result.provider, model: result.model,
+              complexity: result.complexity, cost: result.cost,
+              usage: result.usage,
+              budgetWarning: budget.warning || null
+            }
+          })}\n\n`);
+          res.end();
+
+          // Async: log cost + extract memories
+          logCostToSupabase(result).catch(err => console.error('[COST] Failed:', err.message));
+          invalidateCostCache(userId);
+          if (!forceProvider) {
+            memory.processConversationMemory(messages, {
+              user_id: userId, agent_id: 'senna_core',
+              source: 'conversation', source_type: 'message'
+            }, process.env).catch(err => console.error('[MEMORY] Extraction failed:', err.message));
+          }
+        } catch (streamErr) {
+          res.write(`data: ${JSON.stringify({ error: streamErr.message })}\n\n`);
+          res.end();
+        }
+        return;
+      }
+
+      // ===== NON-STREAMING MODE =====
       const result = await routeMessage(enrichedMessages, process.env, {
         forceProvider: forceProvider || null,
         forceModel: forceModel || null
       });
 
-      // Log cost to Supabase (async, non-blocking)
       logCostToSupabase(result).catch(err =>
         console.error('[COST] Failed to log:', err.message)
       );
       invalidateCostCache(userId);
 
-      // Extract memories from conversation (async, non-blocking)
       if (!forceProvider) {
         memory.processConversationMemory(messages, {
           user_id: userId, agent_id: 'senna_core',
