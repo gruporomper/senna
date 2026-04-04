@@ -1800,18 +1800,88 @@ function showConvContextMenu(event, session) {
   }, 0);
 }
 
+// ===== LABEL STORE =====
+const LABEL_COLORS = ['#6b7280','#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899'];
+
+const LabelStore = {
+  KEY: 'senna_labels',
+  _defaults: [
+    { id: 'lbl_1', name: 'Trabalho', color: '#3b82f6' },
+    { id: 'lbl_2', name: 'Pessoal', color: '#8b5cf6' },
+    { id: 'lbl_3', name: 'Projeto', color: '#10b981' },
+    { id: 'lbl_4', name: 'Estudo', color: '#f59e0b' },
+    { id: 'lbl_5', name: 'Ideia', color: '#ec4899' },
+    { id: 'lbl_6', name: 'Urgente', color: '#ef4444' },
+  ],
+
+  getAll() {
+    const raw = localStorage.getItem(this.KEY);
+    if (!raw) {
+      this.save(this._defaults);
+      return [...this._defaults];
+    }
+    try { return JSON.parse(raw); } catch { return [...this._defaults]; }
+  },
+
+  save(labels) {
+    localStorage.setItem(this.KEY, JSON.stringify(labels));
+  },
+
+  add(name, color) {
+    const labels = this.getAll();
+    const id = 'lbl_' + Date.now();
+    labels.push({ id, name, color });
+    this.save(labels);
+    return id;
+  },
+
+  update(id, { name, color }) {
+    const labels = this.getAll();
+    const label = labels.find(l => l.id === id);
+    if (!label) return;
+    const oldName = label.name;
+    label.name = name;
+    label.color = color;
+    this.save(labels);
+    // Propagate to all sessions
+    const all = SessionManager.getAll(true);
+    let changed = false;
+    all.forEach(s => {
+      if (s.label && s.label.name === oldName) {
+        s.label = { name, color };
+        changed = true;
+      }
+    });
+    if (changed) SessionManager.saveAll(all);
+  },
+
+  remove(id) {
+    const labels = this.getAll();
+    const label = labels.find(l => l.id === id);
+    if (!label) return;
+    const removedName = label.name;
+    this.save(labels.filter(l => l.id !== id));
+    // Clear from sessions
+    const all = SessionManager.getAll(true);
+    let changed = false;
+    all.forEach(s => {
+      if (s.label && s.label.name === removedName) {
+        s.label = null;
+        changed = true;
+      }
+    });
+    if (changed) SessionManager.saveAll(all);
+  }
+};
+
 // ===== LABEL PICKER =====
-const LABEL_PRESETS = [
-  { name: 'Trabalho', color: '#3b82f6' },
-  { name: 'Pessoal', color: '#8b5cf6' },
-  { name: 'Projeto', color: '#10b981' },
-  { name: 'Estudo', color: '#f59e0b' },
-  { name: 'Ideia', color: '#ec4899' },
-  { name: 'Urgente', color: '#ef4444' },
-];
+function _colorPickerHtml(selectedColor) {
+  return LABEL_COLORS.map(c =>
+    `<button class="label-color-btn${c === selectedColor ? ' selected' : ''}" data-color="${c}" style="background:${c}"></button>`
+  ).join('');
+}
 
 function showLabelPicker(sessionId, anchorRect) {
-  // Remove any existing picker
   const old = document.querySelector('.label-picker');
   if (old) old.remove();
 
@@ -1821,79 +1891,164 @@ function showLabelPicker(sessionId, anchorRect) {
   const picker = document.createElement('div');
   picker.className = 'label-picker';
 
-  let html = '<div class="label-picker-title">Etiquetar</div>';
-  LABEL_PRESETS.forEach(preset => {
-    const isActive = session.label && session.label.name === preset.name;
-    html += `<button class="label-picker-item${isActive ? ' active' : ''}" data-name="${preset.name}" data-color="${preset.color}">
-      <span class="label-picker-dot" style="background:${preset.color}"></span>
-      ${preset.name}
-      ${isActive ? '<span class="label-picker-check">✓</span>' : ''}
+  function render() {
+    const labels = LabelStore.getAll();
+    let html = '<div class="label-picker-title">Etiquetar</div>';
+
+    labels.forEach(lbl => {
+      const isActive = session.label && session.label.name === lbl.name;
+      html += `<div class="label-picker-row" data-label-id="${lbl.id}">
+        <button class="label-picker-item${isActive ? ' active' : ''}" data-name="${escapeHtml(lbl.name)}" data-color="${lbl.color}">
+          <span class="label-picker-dot" style="background:${lbl.color}"></span>
+          <span class="label-picker-name">${escapeHtml(lbl.name)}</span>
+          ${isActive ? '<span class="label-picker-check">✓</span>' : ''}
+        </button>
+        <button class="label-edit-btn" data-edit-id="${lbl.id}" title="Editar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+      </div>`;
+    });
+
+    html += '<div class="conv-context-menu-separator"></div>';
+    html += `<button class="label-picker-add-btn" data-action="add">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Nova etiqueta
     </button>`;
-  });
-  html += '<div class="conv-context-menu-separator"></div>';
-  html += `<div class="label-picker-custom">
-    <input type="text" class="label-picker-input" placeholder="Etiqueta personalizada" maxlength="20" />
-    <div class="label-picker-colors">
-      <button class="label-color-btn selected" data-color="#6b7280" style="background:#6b7280"></button>
-      <button class="label-color-btn" data-color="#ef4444" style="background:#ef4444"></button>
-      <button class="label-color-btn" data-color="#f59e0b" style="background:#f59e0b"></button>
-      <button class="label-color-btn" data-color="#10b981" style="background:#10b981"></button>
-      <button class="label-color-btn" data-color="#3b82f6" style="background:#3b82f6"></button>
-      <button class="label-color-btn" data-color="#8b5cf6" style="background:#8b5cf6"></button>
-      <button class="label-color-btn" data-color="#ec4899" style="background:#ec4899"></button>
-    </div>
-  </div>`;
-  if (session.label) {
-    html += '<button class="label-picker-item label-picker-remove" data-name="__remove">Remover etiqueta</button>';
+
+    if (session.label) {
+      html += '<div class="conv-context-menu-separator"></div>';
+      html += '<button class="label-picker-item label-picker-remove" data-name="__remove">Remover etiqueta</button>';
+    }
+
+    picker.innerHTML = html;
+    attachPickerEvents();
   }
-  picker.innerHTML = html;
+
+  function showEditRow(labelId, container) {
+    const labels = LabelStore.getAll();
+    const lbl = labelId ? labels.find(l => l.id === labelId) : null;
+    const name = lbl ? lbl.name : '';
+    const color = lbl ? lbl.color : '#6b7280';
+
+    container.innerHTML = `
+      <div class="label-picker-edit-row">
+        <input type="text" class="label-picker-edit-input" value="${escapeHtml(name)}" placeholder="Nome" maxlength="20" />
+        <div class="label-picker-colors">${_colorPickerHtml(color)}</div>
+        <div class="label-picker-edit-actions">
+          <button class="label-edit-action confirm" title="Confirmar">✓</button>
+          <button class="label-edit-action cancel" title="Cancelar">✕</button>
+          ${labelId ? '<button class="label-edit-action delete" title="Excluir">🗑</button>' : ''}
+        </div>
+      </div>
+    `;
+
+    const input = container.querySelector('.label-picker-edit-input');
+    let editColor = color;
+
+    container.querySelectorAll('.label-color-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        container.querySelectorAll('.label-color-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        editColor = btn.dataset.color;
+      });
+    });
+
+    container.querySelector('.confirm').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newName = input.value.trim();
+      if (!newName) return;
+      if (labelId) {
+        LabelStore.update(labelId, { name: newName, color: editColor });
+        // Re-read session in case it was updated by propagation
+        const updated = SessionManager.get(sessionId);
+        if (updated) Object.assign(session, updated);
+      } else {
+        LabelStore.add(newName, editColor);
+      }
+      render();
+      renderConversationList();
+    });
+
+    container.querySelector('.cancel').addEventListener('click', (e) => {
+      e.stopPropagation();
+      render();
+    });
+
+    const delBtn = container.querySelector('.delete');
+    if (delBtn) {
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        LabelStore.remove(labelId);
+        const updated = SessionManager.get(sessionId);
+        if (updated) Object.assign(session, updated);
+        render();
+        renderConversationList();
+      });
+    }
+
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') container.querySelector('.confirm').click();
+      if (e.key === 'Escape') container.querySelector('.cancel').click();
+    });
+    input.focus();
+  }
+
+  function attachPickerEvents() {
+    // Click label to apply
+    picker.querySelectorAll('.label-picker-item[data-name]').forEach(item => {
+      item.addEventListener('click', (e) => {
+        const name = item.dataset.name;
+        if (name === '__remove') {
+          SessionManager.setLabel(sessionId, null);
+        } else {
+          SessionManager.setLabel(sessionId, { name, color: item.dataset.color });
+        }
+        picker.remove();
+        renderConversationList();
+      });
+    });
+
+    // Click edit button
+    picker.querySelectorAll('.label-edit-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const labelId = btn.dataset.editId;
+        const row = btn.closest('.label-picker-row');
+        showEditRow(labelId, row);
+      });
+    });
+
+    // Click add button
+    const addBtn = picker.querySelector('.label-picker-add-btn');
+    if (addBtn) {
+      addBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wrapper = document.createElement('div');
+        wrapper.className = 'label-picker-row';
+        addBtn.replaceWith(wrapper);
+        showEditRow(null, wrapper);
+      });
+    }
+  }
+
+  render();
 
   picker.style.top = anchorRect.bottom + 4 + 'px';
   picker.style.left = anchorRect.left + 'px';
-
   document.body.appendChild(picker);
 
   requestAnimationFrame(() => {
     const r = picker.getBoundingClientRect();
     if (r.right > window.innerWidth) picker.style.left = (window.innerWidth - r.width - 8) + 'px';
     if (r.bottom > window.innerHeight) picker.style.top = (anchorRect.top - r.height - 4) + 'px';
-  });
-
-  // Custom label: color selection
-  let selectedCustomColor = '#6b7280';
-  picker.querySelectorAll('.label-color-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      picker.querySelectorAll('.label-color-btn').forEach(b => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      selectedCustomColor = btn.dataset.color;
-    });
-  });
-
-  // Custom label: submit on Enter
-  const customInput = picker.querySelector('.label-picker-input');
-  customInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && customInput.value.trim()) {
-      SessionManager.setLabel(sessionId, { name: customInput.value.trim(), color: selectedCustomColor });
-      picker.remove();
-      renderConversationList();
-    }
-    e.stopPropagation();
-  });
-  customInput.addEventListener('click', (e) => e.stopPropagation());
-
-  picker.addEventListener('click', (e) => {
-    const item = e.target.closest('[data-name]');
-    if (!item) return;
-    const name = item.dataset.name;
-    if (name === '__remove') {
-      SessionManager.setLabel(sessionId, null);
-    } else {
-      const color = item.dataset.color;
-      SessionManager.setLabel(sessionId, { name, color });
-    }
-    picker.remove();
-    renderConversationList();
   });
 
   setTimeout(() => {
