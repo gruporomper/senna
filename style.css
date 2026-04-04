@@ -1884,8 +1884,8 @@ body.state-listening .input-row {
 /* Hide in session mode, show in home mode */
 body.mode-home .box-voice-controls { display: flex; }
 body.mode-home .controls { display: none; }
+body.mode-home .perpetual-greeting { display: none; }
 .box-voice-controls { display: none; }
-body.mode-home .box-voice-controls { display: flex; }
 
 .box-mic-btn {
   width: 56px;
