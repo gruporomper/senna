@@ -265,6 +265,9 @@
         setState(STATE_MAP[newState] || 'idle');
       }
 
+      // Update cockpit state label
+      this._updateCockpitState(newState);
+
       // Dispatch event for UI hooks
       document.dispatchEvent(new CustomEvent('voiceStateChange', {
         detail: { from: oldState, to: newState }
@@ -606,6 +609,9 @@
               }
               // Accumulate sentences
               this.accumulateSentence(token);
+              // Update cockpit transcript with streamed response
+              const ct = document.getElementById('cockpitTranscript');
+              if (ct) ct.textContent = fullContent;
             }
           }
         );
@@ -957,33 +963,31 @@
     // ===== UI HELPERS =====
 
     _showRecordingUI() {
-      const iw = document.getElementById('inputWrapper');
-      const rr = document.getElementById('recordingRow');
-      if (iw) iw.classList.add('hidden');
-      if (rr) rr.classList.remove('hidden');
-
-      // Hide cancel/send in voice engine mode (VAD handles everything)
-      const cancelBtn = document.getElementById('cancelRecBtn');
-      const sendBtn = document.getElementById('sendRecBtn');
-      if (cancelBtn) cancelBtn.classList.add('walkie-hidden');
-      if (sendBtn) sendBtn.classList.add('walkie-hidden');
-
-      // Start waveform visualization using existing infrastructure
-      if (typeof startWaveform === 'function') startWaveform();
+      const cockpit = document.getElementById('voiceCockpit');
+      if (cockpit) {
+        cockpit.classList.remove('hidden');
+        const transcript = document.getElementById('cockpitTranscript');
+        if (transcript) transcript.textContent = '';
+        this._updateCockpitState('LISTENING');
+      }
     },
 
     _hideRecordingUI() {
-      const iw = document.getElementById('inputWrapper');
-      const rr = document.getElementById('recordingRow');
-      if (iw) iw.classList.remove('hidden');
-      if (rr) rr.classList.add('hidden');
+      const cockpit = document.getElementById('voiceCockpit');
+      if (cockpit) cockpit.classList.add('hidden');
+    },
 
-      const cancelBtn = document.getElementById('cancelRecBtn');
-      const sendBtn = document.getElementById('sendRecBtn');
-      if (cancelBtn) cancelBtn.classList.remove('walkie-hidden');
-      if (sendBtn) sendBtn.classList.remove('walkie-hidden');
-
-      if (typeof stopWaveform === 'function') stopWaveform();
+    _updateCockpitState(state) {
+      const el = document.getElementById('cockpitState');
+      if (!el) return;
+      const labels = {
+        LISTENING: 'OUVINDO...',
+        THINKING: 'PENSANDO...',
+        SPEAKING: 'FALANDO...',
+        IDLE: '',
+        ERROR: 'ERRO'
+      };
+      el.textContent = labels[state] || '';
     },
 
     // ===== METRICS =====

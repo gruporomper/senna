@@ -1870,6 +1870,112 @@ body.state-listening .input-row {
   box-shadow: 0 0 0 3px rgba(0, 155, 58, 0.1);
 }
 
+/* ===== VOICE COCKPIT OVERLAY ===== */
+.voice-cockpit {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(8, 8, 12, 0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  transition: opacity 0.4s ease;
+}
+.voice-cockpit.hidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.cockpit-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  color: var(--dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+.cockpit-close svg {
+  width: 20px;
+  height: 20px;
+}
+.cockpit-close:hover {
+  color: var(--yellow);
+  border-color: rgba(255, 215, 0, 0.3);
+  background: rgba(255, 215, 0, 0.08);
+}
+
+.cockpit-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.cockpit-orb-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cockpit-orb {
+  width: 200px !important;
+  height: 200px !important;
+  cursor: pointer;
+}
+
+.cockpit-state {
+  font-family: 'Orbitron', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  margin-top: 28px;
+  color: var(--dim);
+  transition: color 0.3s ease;
+}
+body.state-listening .cockpit-state { color: var(--green); }
+body.state-thinking .cockpit-state { color: var(--blue-light); }
+body.state-speaking .cockpit-state { color: var(--yellow); }
+
+.cockpit-transcript {
+  max-width: 500px;
+  width: 90vw;
+  text-align: center;
+  margin-top: 20px;
+  padding: 0 16px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.7);
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.cockpit-transcript::-webkit-scrollbar { display: none; }
+
+.cockpit-hint {
+  position: absolute;
+  bottom: 40px;
+  font-size: 12px;
+  color: var(--dim);
+  opacity: 0.4;
+  letter-spacing: 0.5px;
+}
+
 /* ===== ANIMATIONS ===== */
 @keyframes pulse {
   0%, 100% { transform: scale(1); }

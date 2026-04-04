@@ -2314,6 +2314,13 @@ function updateLiveTranscript(text) {
   bubble.textContent = text;
   const scrollTarget = appMode !== 'home' ? chatArea : perpetualMessages;
   scrollTarget.scrollTop = scrollTarget.scrollHeight;
+
+  // Also update cockpit transcript if voice cockpit is open
+  const cockpitEl = document.getElementById('voiceCockpit');
+  const cockpitTranscript = document.getElementById('cockpitTranscript');
+  if (cockpitEl && cockpitTranscript && !cockpitEl.classList.contains('hidden')) {
+    cockpitTranscript.textContent = text;
+  }
 }
 
 function removeLiveTranscript() {
@@ -2818,9 +2825,11 @@ function handleOrbClick() {
 
 orb.addEventListener('click', handleOrbClick);
 
-// Cockpit orb also activates voice
-const cockpitOrbEl = document.querySelector('.cockpit-orb-container .orb');
-if (cockpitOrbEl) cockpitOrbEl.addEventListener('click', handleOrbClick);
+// Voice cockpit: orb click and close button
+document.getElementById('cockpitOrb')?.addEventListener('click', handleOrbClick);
+document.getElementById('cockpitClose')?.addEventListener('click', () => {
+  if (window.VoiceEngine) window.VoiceEngine.deactivate();
+});
 
 // ===== SEARCH SYSTEM =====
 const searchOverlay = document.getElementById('searchOverlay');
