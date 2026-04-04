@@ -363,7 +363,10 @@
               <div class="orb-ring ring-2"></div>
             </div>
           </div>
-          <p class="perpetual-greeting" id="perpetualGreeting"></p>
+          <div class="perpetual-greeting" id="perpetualGreeting">
+            <p class="greeting-text" id="greetingText"></p>
+            <span class="greeting-suggestion hidden" id="greetingSuggestion"></span>
+          </div>
           <div class="perpetual-messages" id="perpetualMessages"></div>
         </div>
       </div>
@@ -388,6 +391,8 @@
 
       <!-- Controls -->
       <div class="controls">
+        <!-- Quick action chips (home mode only) -->
+        <div class="quick-actions" id="quickActions"></div>
         <!-- Normal input mode -->
         <div class="input-wrapper" id="inputWrapper">
           <div class="attach-wrapper">
