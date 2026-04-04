@@ -417,13 +417,14 @@
             </svg>
           </button>
           <!-- Volume -->
-          <button class="media-btn" id="mediaVolumeBtn" title="Volume">
-            <svg class="icon-vol-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>
-            <svg class="icon-vol-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-          </button>
-          <!-- Volume Slider (hidden by default) -->
-          <div class="volume-slider-wrap hidden" id="volumeSliderWrap">
-            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="80" />
+          <div class="media-vol-wrap">
+            <button class="media-btn" id="mediaVolumeBtn" title="Volume">
+              <svg class="icon-vol-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>
+              <svg class="icon-vol-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+            </button>
+            <div class="volume-slider-wrap hidden" id="volumeSliderWrap">
+              <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="80" />
+            </div>
           </div>
         </div>
       </div>

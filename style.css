@@ -1949,11 +1949,19 @@ body.mode-home .perpetual-greeting { display: none; }
   border-radius: 22px;
 }
 
+/* Volume wrapper — anchor for slider popup */
+.media-vol-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 /* Volume slider */
 .volume-slider-wrap {
   position: absolute;
-  bottom: 60px;
-  right: 0;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
   background: rgba(15, 15, 15, 0.95);
   border: 1px solid rgba(80, 200, 120, 0.15);
   border-radius: 12px;
