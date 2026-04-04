@@ -399,14 +399,33 @@
       <div class="box-voice-controls" id="boxVoiceControls">
         <div class="cockpit-state" id="cockpitState"></div>
         <div class="cockpit-transcript" id="cockpitTranscript"></div>
-        <button class="box-mic-btn" id="boxMicBtn" title="Falar com SENNA">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="9" y="1" width="6" height="12" rx="3"/>
-            <path d="M19 10v1a7 7 0 01-14 0v-1"/>
-            <line x1="12" y1="19" x2="12" y2="23"/>
-            <line x1="8" y1="23" x2="16" y2="23"/>
-          </svg>
-        </button>
+        <div class="media-toolbar" id="mediaToolbar">
+          <!-- Play / Pause -->
+          <button class="media-btn" id="mediaPauseBtn" title="Pausar conversa" disabled>
+            <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+            <svg class="icon-play hidden" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          </button>
+          <!-- Speed -->
+          <button class="media-btn media-btn-label" id="mediaSpeedBtn" title="Velocidade da voz">1x</button>
+          <!-- Mic (main action) -->
+          <button class="media-btn media-btn-mic" id="boxMicBtn" title="Falar com SENNA">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="1" width="6" height="12" rx="3"/>
+              <path d="M19 10v1a7 7 0 01-14 0v-1"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
+          <!-- Volume -->
+          <button class="media-btn" id="mediaVolumeBtn" title="Volume">
+            <svg class="icon-vol-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><path d="M19.07 4.93a10 10 0 010 14.14"/><path d="M15.54 8.46a5 5 0 010 7.07"/></svg>
+            <svg class="icon-vol-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11,5 6,9 2,9 2,15 6,15 11,19"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+          </button>
+          <!-- Volume Slider (hidden by default) -->
+          <div class="volume-slider-wrap hidden" id="volumeSliderWrap">
+            <input type="range" id="volumeSlider" class="volume-slider" min="0" max="100" value="80" />
+          </div>
+        </div>
       </div>
 
       <!-- Controls -->

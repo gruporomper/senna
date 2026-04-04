@@ -1887,55 +1887,120 @@ body.mode-home .controls { display: none; }
 body.mode-home .perpetual-greeting { display: none; }
 .box-voice-controls { display: none; }
 
-.box-mic-btn {
-  width: 56px;
-  height: 56px;
+/* --- Media Toolbar --- */
+.media-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(80, 200, 120, 0.06);
+  border: 1px solid rgba(80, 200, 120, 0.15);
+  border-radius: 32px;
+}
+
+.media-btn {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 215, 0, 0.2);
-  background: rgba(255, 215, 0, 0.05);
-  color: var(--yellow);
+  border: 1.5px solid rgba(80, 200, 120, 0.25);
+  background: transparent;
+  color: #50C878;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  padding: 0;
 }
-.box-mic-btn svg {
-  width: 24px;
-  height: 24px;
+.media-btn svg { width: 18px; height: 18px; }
+.media-btn:hover {
+  background: rgba(80, 200, 120, 0.12);
+  border-color: rgba(80, 200, 120, 0.5);
+  box-shadow: 0 0 14px rgba(80, 200, 120, 0.15);
 }
-.box-mic-btn:hover {
-  background: rgba(255, 215, 0, 0.12);
-  border-color: rgba(255, 215, 0, 0.4);
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.15);
+.media-btn:active { transform: scale(0.93); }
+.media-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+  box-shadow: none;
 }
-.box-mic-btn:active {
-  transform: scale(0.95);
+.media-btn:disabled:hover {
+  background: transparent;
+  border-color: rgba(80, 200, 120, 0.25);
+  box-shadow: none;
 }
 
-/* Active mic state */
-body.state-listening .box-mic-btn {
-  border-color: var(--green);
-  color: var(--green);
-  background: rgba(0, 155, 58, 0.1);
-  box-shadow: 0 0 20px rgba(0, 155, 58, 0.2);
+/* Mic — larger, accent ring */
+.media-btn-mic {
+  width: 52px;
+  height: 52px;
+  border-width: 2px;
+  border-color: rgba(80, 200, 120, 0.35);
+}
+.media-btn-mic svg { width: 22px; height: 22px; }
+
+/* Speed label button */
+.media-btn-label {
+  font-family: 'Orbitron', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  width: auto;
+  min-width: 40px;
+  padding: 0 8px;
+  border-radius: 20px;
+}
+
+/* Volume slider */
+.volume-slider-wrap {
+  position: absolute;
+  bottom: 70px;
+  right: 10px;
+  background: rgba(15, 15, 15, 0.95);
+  border: 1px solid rgba(80, 200, 120, 0.2);
+  border-radius: 12px;
+  padding: 12px 8px;
+  backdrop-filter: blur(8px);
+}
+.volume-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 4px;
+  height: 80px;
+  accent-color: #50C878;
+  cursor: pointer;
+}
+
+/* Active states — mic button */
+body.state-listening .media-btn-mic {
+  border-color: #50C878;
+  color: #50C878;
+  background: rgba(80, 200, 120, 0.12);
+  box-shadow: 0 0 20px rgba(80, 200, 120, 0.25);
   animation: pulse-mic 1.5s ease-in-out infinite;
 }
-body.state-thinking .box-mic-btn {
+body.state-thinking .media-btn-mic {
   border-color: var(--blue-light);
   color: var(--blue-light);
   background: rgba(0, 71, 204, 0.1);
 }
-body.state-speaking .box-mic-btn {
-  border-color: var(--yellow);
-  color: var(--yellow);
-  background: rgba(255, 215, 0, 0.1);
-  box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
+body.state-speaking .media-btn-mic {
+  border-color: #50C878;
+  color: #50C878;
+  background: rgba(80, 200, 120, 0.1);
+  box-shadow: 0 0 20px rgba(80, 200, 120, 0.2);
+}
+
+/* Pause btn active when conversation is paused */
+.media-btn.paused {
+  border-color: rgba(255, 180, 0, 0.5);
+  color: #FFB400;
+  background: rgba(255, 180, 0, 0.1);
 }
 
 @keyframes pulse-mic {
-  0%, 100% { box-shadow: 0 0 20px rgba(0, 155, 58, 0.2); }
-  50% { box-shadow: 0 0 30px rgba(0, 155, 58, 0.4); }
+  0%, 100% { box-shadow: 0 0 20px rgba(80, 200, 120, 0.25); }
+  50% { box-shadow: 0 0 30px rgba(80, 200, 120, 0.45); }
 }
 
 .cockpit-state {
@@ -1948,9 +2013,9 @@ body.state-speaking .box-mic-btn {
   transition: color 0.3s ease;
   min-height: 16px;
 }
-body.state-listening .cockpit-state { color: var(--green); }
+body.state-listening .cockpit-state { color: #50C878; }
 body.state-thinking .cockpit-state { color: var(--blue-light); }
-body.state-speaking .cockpit-state { color: var(--yellow); }
+body.state-speaking .cockpit-state { color: #50C878; }
 
 .cockpit-transcript {
   max-width: 500px;

@@ -2828,6 +2828,66 @@ orb.addEventListener('click', handleOrbClick);
 // Box mic button activates voice mode (same as orb click)
 document.getElementById('boxMicBtn')?.addEventListener('click', handleOrbClick);
 
+// ===== MEDIA TOOLBAR =====
+(function wireMediaToolbar() {
+  const pauseBtn = document.getElementById('mediaPauseBtn');
+  const speedBtn = document.getElementById('mediaSpeedBtn');
+  const volumeBtn = document.getElementById('mediaVolumeBtn');
+  const volumeWrap = document.getElementById('volumeSliderWrap');
+  const volumeSlider = document.getElementById('volumeSlider');
+
+  const speeds = [0.75, 1, 1.25, 1.5, 2];
+  let speedIdx = 1; // default 1x
+
+  // Pause / Resume
+  pauseBtn?.addEventListener('click', () => {
+    if (window.VoiceEngine) window.VoiceEngine.togglePause();
+  });
+
+  // Speed cycling
+  speedBtn?.addEventListener('click', () => {
+    speedIdx = (speedIdx + 1) % speeds.length;
+    const rate = speeds[speedIdx];
+    speedBtn.textContent = rate === 1 ? '1x' : rate + 'x';
+    if (window.VoiceEngine) window.VoiceEngine.setPlaybackRate(rate);
+  });
+
+  // Volume button toggles slider or mutes on long-press
+  let volTimeout;
+  volumeBtn?.addEventListener('click', () => {
+    volumeWrap?.classList.toggle('hidden');
+  });
+  volumeBtn?.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (window.VoiceEngine) {
+      window.VoiceEngine.toggleMute();
+      const muted = window.VoiceEngine.ttsGainNode && window.VoiceEngine.ttsGainNode.gain.value === 0;
+      volumeBtn.querySelector('.icon-vol-on')?.classList.toggle('hidden', muted);
+      volumeBtn.querySelector('.icon-vol-off')?.classList.toggle('hidden', !muted);
+    }
+  });
+
+  // Volume slider
+  volumeSlider?.addEventListener('input', (e) => {
+    const vol = parseInt(e.target.value) / 100;
+    if (window.VoiceEngine) window.VoiceEngine.setVolume(vol);
+    // Update icon
+    const muted = vol === 0;
+    volumeBtn?.querySelector('.icon-vol-on')?.classList.toggle('hidden', muted);
+    volumeBtn?.querySelector('.icon-vol-off')?.classList.toggle('hidden', !muted);
+  });
+
+  // Close volume slider when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!volumeWrap?.classList.contains('hidden') &&
+        !volumeWrap?.contains(e.target) &&
+        e.target !== volumeBtn &&
+        !volumeBtn?.contains(e.target)) {
+      volumeWrap?.classList.add('hidden');
+    }
+  });
+})();
+
 // ===== SEARCH SYSTEM =====
 const searchOverlay = document.getElementById('searchOverlay');
 const searchInput = document.getElementById('searchInput');

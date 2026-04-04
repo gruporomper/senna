@@ -110,6 +110,13 @@
     // --- Sentence accumulator ---
     sentenceBuffer: '',
 
+    // --- Media controls ---
+    paused: false,
+    ttsPlaybackRate: 1.0,
+    ttsVolume: 0.8,
+    ttsGainNode: null,
+    pausedState: null,        // state before pause (LISTENING/THINKING/SPEAKING)
+
     // --- Metrics ---
     metrics: {
       sessionStart: null,
@@ -198,10 +205,7 @@
 
         // Create TTS AudioContext if needed
         if (!this.ttsAudioContext || this.ttsAudioContext.state === 'closed') {
-          this.ttsAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-          this.ttsSpeakAnalyser = this.ttsAudioContext.createAnalyser();
-          this.ttsSpeakAnalyser.fftSize = 256;
-          this.ttsSpeakAnalyser.connect(this.ttsAudioContext.destination);
+          this._initTTSAudioContext();
         }
 
         this.transition('LISTENING');
@@ -782,10 +786,7 @@
 
         // Decode audio
         if (!this.ttsAudioContext || this.ttsAudioContext.state === 'closed') {
-          this.ttsAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-          this.ttsSpeakAnalyser = this.ttsAudioContext.createAnalyser();
-          this.ttsSpeakAnalyser.fftSize = 256;
-          this.ttsSpeakAnalyser.connect(this.ttsAudioContext.destination);
+          this._initTTSAudioContext();
         }
 
         item.audioBuffer = await this.ttsAudioContext.decodeAudioData(arrayBuffer);
@@ -812,6 +813,7 @@
     },
 
     playNextChunk() {
+      if (this.paused) return;
       // Find first ready chunk
       while (this.ttsQueue.length > 0 && this.ttsQueue[0].status === 'ready' && !this.ttsQueue[0].audioBuffer) {
         this.ttsQueue.shift(); // skip failed chunks
@@ -854,7 +856,8 @@
 
       const source = this.ttsAudioContext.createBufferSource();
       source.buffer = item.audioBuffer;
-      source.connect(this.ttsSpeakAnalyser);
+      source.playbackRate.value = this.ttsPlaybackRate;
+      source.connect(this.ttsGainNode || this.ttsSpeakAnalyser);
       this.currentAudioSource = source;
 
       const startTime = Math.max(
@@ -862,7 +865,7 @@
         this.nextPlayTime || 0
       );
       source.start(startTime);
-      this.nextPlayTime = startTime + item.audioBuffer.duration;
+      this.nextPlayTime = startTime + (item.audioBuffer.duration / this.ttsPlaybackRate);
 
       // Animate helmet
       this._animateHelmet();
@@ -1091,18 +1094,142 @@
       }
     },
 
+    // ===== MEDIA CONTROLS =====
+
+    _initTTSAudioContext() {
+      this.ttsAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+      this.ttsGainNode = this.ttsAudioContext.createGain();
+      this.ttsGainNode.gain.value = this.ttsVolume;
+      this.ttsSpeakAnalyser = this.ttsAudioContext.createAnalyser();
+      this.ttsSpeakAnalyser.fftSize = 256;
+      this.ttsGainNode.connect(this.ttsSpeakAnalyser);
+      this.ttsSpeakAnalyser.connect(this.ttsAudioContext.destination);
+    },
+
+    pauseConversation() {
+      if (this.paused || this.state === 'IDLE') return;
+      this.paused = true;
+      this.pausedState = this.state;
+
+      // Pause TTS playback
+      if (this.ttsAudioContext && this.ttsAudioContext.state === 'running') {
+        this.ttsAudioContext.suspend();
+      }
+
+      // Pause Web Speech Recognition
+      if (this.useWebSpeechSTT && this.webSpeechRecognition) {
+        try { this.webSpeechRecognition.stop(); } catch (e) {}
+      }
+
+      // Abort pending LLM if thinking
+      if (this.state === 'THINKING' && this.llmAbort) {
+        this.llmAbort.abort();
+      }
+
+      this._updateCockpitState('PAUSED');
+      console.log('[VoiceEngine] Conversation PAUSED');
+
+      // Update pause button UI
+      const btn = document.getElementById('mediaPauseBtn');
+      if (btn) {
+        btn.classList.add('paused');
+        btn.querySelector('.icon-pause')?.classList.add('hidden');
+        btn.querySelector('.icon-play')?.classList.remove('hidden');
+        btn.title = 'Retomar conversa';
+      }
+    },
+
+    resumeConversation() {
+      if (!this.paused) return;
+      this.paused = false;
+
+      // Resume TTS playback
+      if (this.ttsAudioContext && this.ttsAudioContext.state === 'suspended') {
+        this.ttsAudioContext.resume();
+      }
+
+      // If was speaking, TTS will continue on its own after resume
+      // If was listening, restart recognition
+      if (this.pausedState === 'LISTENING') {
+        this.transition('LISTENING');
+        if (this.useWebSpeechSTT && this.webSpeechRecognition) {
+          setTimeout(() => {
+            try { this.webSpeechRecognition.start(); } catch (e) {}
+          }, 200);
+        }
+      } else if (this.pausedState === 'SPEAKING') {
+        this._updateCockpitState('SPEAKING');
+      }
+
+      this.pausedState = null;
+      console.log('[VoiceEngine] Conversation RESUMED');
+
+      // Update pause button UI
+      const btn = document.getElementById('mediaPauseBtn');
+      if (btn) {
+        btn.classList.remove('paused');
+        btn.querySelector('.icon-pause')?.classList.remove('hidden');
+        btn.querySelector('.icon-play')?.classList.add('hidden');
+        btn.title = 'Pausar conversa';
+      }
+    },
+
+    togglePause() {
+      if (this.paused) this.resumeConversation();
+      else this.pauseConversation();
+    },
+
+    setPlaybackRate(rate) {
+      this.ttsPlaybackRate = rate;
+      // Apply to currently playing source if any
+      if (this.currentAudioSource) {
+        this.currentAudioSource.playbackRate.value = rate;
+      }
+      console.log(`[VoiceEngine] Playback rate: ${rate}x`);
+    },
+
+    setVolume(vol) {
+      this.ttsVolume = Math.max(0, Math.min(1, vol));
+      if (this.ttsGainNode) {
+        this.ttsGainNode.gain.value = this.ttsVolume;
+      }
+      console.log(`[VoiceEngine] Volume: ${Math.round(this.ttsVolume * 100)}%`);
+    },
+
+    toggleMute() {
+      if (this.ttsGainNode) {
+        if (this.ttsGainNode.gain.value > 0) {
+          this._preMuteVolume = this.ttsGainNode.gain.value;
+          this.ttsGainNode.gain.value = 0;
+        } else {
+          this.ttsGainNode.gain.value = this._preMuteVolume || 0.8;
+        }
+      }
+    },
+
     // ===== UI HELPERS =====
 
     _showRecordingUI() {
       const transcript = document.getElementById('cockpitTranscript');
       if (transcript) transcript.textContent = '';
       this._updateCockpitState('LISTENING');
+      const pauseBtn = document.getElementById('mediaPauseBtn');
+      if (pauseBtn) pauseBtn.disabled = false;
     },
 
     _hideRecordingUI() {
       this._updateCockpitState('');
       const transcript = document.getElementById('cockpitTranscript');
       if (transcript) transcript.textContent = '';
+      const pauseBtn = document.getElementById('mediaPauseBtn');
+      if (pauseBtn) {
+        pauseBtn.disabled = true;
+        pauseBtn.classList.remove('paused');
+        pauseBtn.querySelector('.icon-pause')?.classList.remove('hidden');
+        pauseBtn.querySelector('.icon-play')?.classList.add('hidden');
+      }
+      this.paused = false;
+      this.pausedState = null;
     },
 
     _updateCockpitState(state) {
@@ -1112,6 +1239,7 @@
         LISTENING: 'OUVINDO...',
         THINKING: 'PENSANDO...',
         SPEAKING: 'FALANDO...',
+        PAUSED: 'PAUSADO',
         IDLE: '',
         ERROR: 'ERRO'
       };
