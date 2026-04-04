@@ -1094,18 +1094,15 @@
     // ===== UI HELPERS =====
 
     _showRecordingUI() {
-      const cockpit = document.getElementById('voiceCockpit');
-      if (cockpit) {
-        cockpit.classList.remove('hidden');
-        const transcript = document.getElementById('cockpitTranscript');
-        if (transcript) transcript.textContent = '';
-        this._updateCockpitState('LISTENING');
-      }
+      const transcript = document.getElementById('cockpitTranscript');
+      if (transcript) transcript.textContent = '';
+      this._updateCockpitState('LISTENING');
     },
 
     _hideRecordingUI() {
-      const cockpit = document.getElementById('voiceCockpit');
-      if (cockpit) cockpit.classList.add('hidden');
+      this._updateCockpitState('');
+      const transcript = document.getElementById('cockpitTranscript');
+      if (transcript) transcript.textContent = '';
     },
 
     _updateCockpitState(state) {

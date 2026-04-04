@@ -377,28 +377,6 @@
         </div>
       </div>
 
-      <!-- Voice Cockpit Overlay -->
-      <div class="voice-cockpit hidden" id="voiceCockpit">
-        <button class="cockpit-close" id="cockpitClose" title="Sair do modo voz">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
-        </button>
-        <div class="cockpit-content">
-          <div class="cockpit-orb-container">
-            <div class="orb-glow"></div>
-            <div class="orb cockpit-orb" id="cockpitOrb">
-              <img class="helmet-svg" src="helmet.png" alt="SENNA" />
-              <div class="orb-ring ring-1"></div>
-              <div class="orb-ring ring-2"></div>
-            </div>
-          </div>
-          <div class="cockpit-state" id="cockpitState">OUVINDO...</div>
-          <div class="cockpit-transcript" id="cockpitTranscript"></div>
-        </div>
-        <div class="cockpit-hint">Toque no capacete para interromper</div>
-      </div>
-
       <!-- Session pre-chat: big helmet centered before first message -->
       <div class="session-prechat-hero" id="sessionPrechatHero">
         <div class="orb-container session-prechat-orb">
@@ -415,6 +393,20 @@
       <!-- Session Chat area (hidden by default) -->
       <div class="chat-area" id="chatArea">
         <div class="chat-messages-wrap" id="messagesWrap"></div>
+      </div>
+
+      <!-- Box Voice Controls (home mode only) -->
+      <div class="box-voice-controls" id="boxVoiceControls">
+        <div class="cockpit-state" id="cockpitState"></div>
+        <div class="cockpit-transcript" id="cockpitTranscript"></div>
+        <button class="box-mic-btn" id="boxMicBtn" title="Falar com SENNA">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="1" width="6" height="12" rx="3"/>
+            <path d="M19 10v1a7 7 0 01-14 0v-1"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
       </div>
 
       <!-- Controls -->

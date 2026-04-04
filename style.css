@@ -1870,83 +1870,83 @@ body.state-listening .input-row {
   box-shadow: 0 0 0 3px rgba(0, 155, 58, 0.1);
 }
 
-/* ===== VOICE COCKPIT OVERLAY ===== */
-.voice-cockpit {
-  position: fixed;
-  inset: 0;
-  z-index: 500;
-  background: rgba(8, 8, 12, 0.97);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+/* ===== BOX VOICE CONTROLS (inline) ===== */
+.box-voice-controls {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  opacity: 1;
-  transition: opacity 0.4s ease;
-}
-.voice-cockpit.hidden {
-  opacity: 0;
-  pointer-events: none;
-  visibility: hidden;
+  gap: 8px;
+  padding: 10px 16px 14px;
+  flex-shrink: 0;
+  z-index: 1;
 }
 
-.cockpit-close {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 44px;
-  height: 44px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+/* Hide in session mode, show in home mode */
+body.mode-home .box-voice-controls { display: flex; }
+body.mode-home .controls { display: none; }
+.box-voice-controls { display: none; }
+body.mode-home .box-voice-controls { display: flex; }
+
+.box-mic-btn {
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  color: var(--dim);
+  border: 2px solid rgba(255, 215, 0, 0.2);
+  background: rgba(255, 215, 0, 0.05);
+  color: var(--yellow);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  z-index: 10;
 }
-.cockpit-close svg {
-  width: 20px;
-  height: 20px;
+.box-mic-btn svg {
+  width: 24px;
+  height: 24px;
 }
-.cockpit-close:hover {
+.box-mic-btn:hover {
+  background: rgba(255, 215, 0, 0.12);
+  border-color: rgba(255, 215, 0, 0.4);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.15);
+}
+.box-mic-btn:active {
+  transform: scale(0.95);
+}
+
+/* Active mic state */
+body.state-listening .box-mic-btn {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(0, 155, 58, 0.1);
+  box-shadow: 0 0 20px rgba(0, 155, 58, 0.2);
+  animation: pulse-mic 1.5s ease-in-out infinite;
+}
+body.state-thinking .box-mic-btn {
+  border-color: var(--blue-light);
+  color: var(--blue-light);
+  background: rgba(0, 71, 204, 0.1);
+}
+body.state-speaking .box-mic-btn {
+  border-color: var(--yellow);
   color: var(--yellow);
-  border-color: rgba(255, 215, 0, 0.3);
-  background: rgba(255, 215, 0, 0.08);
+  background: rgba(255, 215, 0, 0.1);
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.2);
 }
 
-.cockpit-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-}
-
-.cockpit-orb-container {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cockpit-orb {
-  width: 200px !important;
-  height: 200px !important;
-  cursor: pointer;
+@keyframes pulse-mic {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 155, 58, 0.2); }
+  50% { box-shadow: 0 0 30px rgba(0, 155, 58, 0.4); }
 }
 
 .cockpit-state {
   font-family: 'Orbitron', monospace;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
   text-transform: uppercase;
-  margin-top: 28px;
   color: var(--dim);
   transition: color 0.3s ease;
+  min-height: 16px;
 }
 body.state-listening .cockpit-state { color: var(--green); }
 body.state-thinking .cockpit-state { color: var(--blue-light); }
@@ -1954,27 +1954,18 @@ body.state-speaking .cockpit-state { color: var(--yellow); }
 
 .cockpit-transcript {
   max-width: 500px;
-  width: 90vw;
+  width: 100%;
   text-align: center;
-  margin-top: 20px;
   padding: 0 16px;
-  font-size: 16px;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.7);
-  max-height: 200px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.6);
+  max-height: 80px;
   overflow-y: auto;
   scrollbar-width: none;
+  min-height: 0;
 }
 .cockpit-transcript::-webkit-scrollbar { display: none; }
-
-.cockpit-hint {
-  position: absolute;
-  bottom: 40px;
-  font-size: 12px;
-  color: var(--dim);
-  opacity: 0.4;
-  letter-spacing: 0.5px;
-}
 
 /* ===== ANIMATIONS ===== */
 @keyframes pulse {

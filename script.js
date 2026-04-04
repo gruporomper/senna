@@ -1412,6 +1412,9 @@ const cockpitObjective = document.getElementById('cockpitObjective');
 function setAppMode(mode) {
   appMode = mode;
 
+  // Toggle mode-home class on body for CSS-driven visibility
+  document.body.classList.toggle('mode-home', mode === 'home');
+
   // Explicit visibility control — single source of truth
   if (mode === 'home') {
     perpetualHome.style.display = '';
@@ -2315,12 +2318,9 @@ function updateLiveTranscript(text) {
   const scrollTarget = appMode !== 'home' ? chatArea : perpetualMessages;
   scrollTarget.scrollTop = scrollTarget.scrollHeight;
 
-  // Also update cockpit transcript if voice cockpit is open
-  const cockpitEl = document.getElementById('voiceCockpit');
+  // Also update inline cockpit transcript
   const cockpitTranscript = document.getElementById('cockpitTranscript');
-  if (cockpitEl && cockpitTranscript && !cockpitEl.classList.contains('hidden')) {
-    cockpitTranscript.textContent = text;
-  }
+  if (cockpitTranscript) cockpitTranscript.textContent = text;
 }
 
 function removeLiveTranscript() {
@@ -2825,11 +2825,8 @@ function handleOrbClick() {
 
 orb.addEventListener('click', handleOrbClick);
 
-// Voice cockpit: orb click and close button
-document.getElementById('cockpitOrb')?.addEventListener('click', handleOrbClick);
-document.getElementById('cockpitClose')?.addEventListener('click', () => {
-  if (window.VoiceEngine) window.VoiceEngine.deactivate();
-});
+// Box mic button activates voice mode (same as orb click)
+document.getElementById('boxMicBtn')?.addEventListener('click', handleOrbClick);
 
 // ===== SEARCH SYSTEM =====
 const searchOverlay = document.getElementById('searchOverlay');
