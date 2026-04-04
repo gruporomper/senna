@@ -2392,6 +2392,14 @@ body.state-listening .input-row {
   from { opacity: 1; transform: translateX(-50%) translateY(0); }
   to { opacity: 0; transform: translateX(-50%) translateY(-10px); }
 }
+.senna-toast-warning {
+  background: #e6a817;
+  color: #1a1a1a;
+  animation: toast-in 0.3s ease, toast-out 0.3s ease 2.5s forwards;
+}
+.budget-confirm-modal {
+  max-width: 360px;
+}
 
 /* ===== RESPONSIVE: QUICK ACTIONS + STAMP ===== */
 @media (max-width: 480px) {

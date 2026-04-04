@@ -19,6 +19,89 @@ const GROK_API_KEY = process.env.GROK_API_KEY;
 const DIR = __dirname;
 const SERVER_START_TIME = new Date().toISOString();
 
+// ===== BUDGET GUARD =====
+const DEFAULT_DAILY_BUDGET = parseFloat(process.env.DAILY_BUDGET || '2.00');
+const DEFAULT_MONTHLY_BUDGET = parseFloat(process.env.MONTHLY_BUDGET || '30.00');
+const COST_CONFIRM_THRESHOLD = 0.10; // ask confirmation above this per-call cost
+
+// In-memory cost cache (TTL 60s) — avoids hitting Supabase on every request
+const costCache = new Map();
+
+async function getCachedCost(userId, period) {
+  const key = `${userId}:${period}`;
+  const cached = costCache.get(key);
+  if (cached && Date.now() - cached.at < 60000) return cached.value;
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) return 0;
+
+  const now = new Date();
+  let startDate;
+  if (period === 'daily') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  } else {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  }
+
+  return new Promise((resolve) => {
+    const url = new URL(`${supabaseUrl}/rest/v1/senna_api_costs`);
+    url.searchParams.set('select', 'estimated_cost');
+    url.searchParams.set('created_at', `gte.${startDate}`);
+    if (userId) url.searchParams.set('user_id', `eq.${userId}`);
+
+    const req = https.request({
+      hostname: url.hostname,
+      port: 443,
+      path: `${url.pathname}?${url.searchParams.toString()}`,
+      method: 'GET',
+      headers: { 'apikey': supabaseKey, 'Authorization': `Bearer ${supabaseKey}` }
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const rows = JSON.parse(data);
+          const total = rows.reduce((sum, r) => sum + parseFloat(r.estimated_cost || 0), 0);
+          costCache.set(key, { value: total, at: Date.now() });
+          resolve(total);
+        } catch { resolve(0); }
+      });
+    });
+    req.on('error', () => resolve(0));
+    req.end();
+  });
+}
+
+function invalidateCostCache(userId) {
+  for (const key of costCache.keys()) {
+    if (key.startsWith(userId + ':')) costCache.delete(key);
+  }
+}
+
+async function checkBudget(userId, complexity) {
+  const daily = await getCachedCost(userId, 'daily');
+  const monthly = await getCachedCost(userId, 'monthly');
+  const dailyHard = DEFAULT_DAILY_BUDGET * 2.5;
+  const monthlyHard = DEFAULT_MONTHLY_BUDGET * 1.5;
+
+  if (monthly >= monthlyHard) {
+    return { allowed: false, reason: 'monthly_limit', daily, monthly, downgrade: true };
+  }
+  if (daily >= dailyHard) {
+    return { allowed: false, reason: 'daily_limit', daily, monthly, downgrade: true };
+  }
+  if (complexity === 'critical') {
+    return { allowed: true, requiresConfirmation: true, daily, monthly };
+  }
+  const warning = daily >= DEFAULT_DAILY_BUDGET
+    ? `Gasto hoje: $${daily.toFixed(2)}`
+    : monthly >= DEFAULT_MONTHLY_BUDGET
+      ? `Gasto mensal: $${monthly.toFixed(2)}`
+      : null;
+  return { allowed: true, warning, daily, monthly };
+}
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -100,11 +183,61 @@ http.createServer(async (req, res) => {
     try {
       const body = await readBody(req);
       const parsed = JSON.parse(body);
-      const { messages, forceProvider, forceModel } = parsed;
+      const { messages, forceProvider, forceModel, confirmed } = parsed;
+      const userId = parsed.userId || 'marlon';
 
       if (!messages || !Array.isArray(messages)) {
         res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         res.end(JSON.stringify({ error: 'messages array required' }));
+        return;
+      }
+
+      // Classify complexity for budget check
+      const complexity = classifyComplexity(messages);
+
+      // Budget guard — check before calling LLM
+      const budget = await checkBudget(userId, complexity);
+
+      if (!budget.allowed && budget.downgrade) {
+        // Over hard limit — force free tier only
+        console.log(`[BUDGET] ${budget.reason} for ${userId}. Downgrading to free tier.`);
+        const result = await routeMessage(messages, process.env, {
+          forceProvider: 'grok',
+          forceModel: 'grok-3-mini-fast'
+        });
+
+        logCostToSupabase(result).catch(err =>
+          console.error('[COST] Failed to log:', err.message)
+        );
+        invalidateCostCache(userId);
+
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({
+          choices: [{ message: { content: result.content, role: 'assistant' } }],
+          _senna: {
+            provider: result.provider, model: result.model,
+            complexity: result.complexity, cost: result.cost,
+            usage: result.usage,
+            budgetWarning: budget.reason === 'daily_limit'
+              ? `Limite diario atingido ($${budget.daily.toFixed(2)}). Usando modelo economico.`
+              : `Limite mensal atingido ($${budget.monthly.toFixed(2)}). Usando modelo economico.`
+          }
+        }));
+        return;
+      }
+
+      // Requires confirmation for expensive calls (CRITICAL or high cost estimate)
+      if (budget.requiresConfirmation && !confirmed) {
+        res.writeHead(202, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({
+          _senna: {
+            requiresConfirmation: true,
+            complexity,
+            estimatedCost: complexity === 'critical' ? 0.15 : 0.10,
+            daily: budget.daily,
+            monthly: budget.monthly
+          }
+        }));
         return;
       }
 
@@ -117,16 +250,16 @@ http.createServer(async (req, res) => {
       logCostToSupabase(result).catch(err =>
         console.error('[COST] Failed to log:', err.message)
       );
+      invalidateCostCache(userId);
 
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({
         choices: [{ message: { content: result.content, role: 'assistant' } }],
         _senna: {
-          provider: result.provider,
-          model: result.model,
-          complexity: result.complexity,
-          cost: result.cost,
-          usage: result.usage
+          provider: result.provider, model: result.model,
+          complexity: result.complexity, cost: result.cost,
+          usage: result.usage,
+          budgetWarning: budget.warning || null
         }
       }));
     } catch (err) {
@@ -145,6 +278,25 @@ http.createServer(async (req, res) => {
       res.end(JSON.stringify(costs));
     } catch (err) {
       console.error('[COSTS] Error:', err.message);
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // ===== BUDGET STATUS: /api/budget =====
+  if (req.url.startsWith('/api/budget') && req.method === 'GET') {
+    try {
+      const userId = 'marlon'; // TODO: extract from auth
+      const daily = await getCachedCost(userId, 'daily');
+      const monthly = await getCachedCost(userId, 'monthly');
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({
+        daily: { spent: Math.round(daily * 100) / 100, soft: DEFAULT_DAILY_BUDGET, hard: DEFAULT_DAILY_BUDGET * 2.5 },
+        monthly: { spent: Math.round(monthly * 100) / 100, soft: DEFAULT_MONTHLY_BUDGET, hard: DEFAULT_MONTHLY_BUDGET * 1.5 },
+        confirmThreshold: COST_CONFIRM_THRESHOLD
+      }));
+    } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({ error: err.message }));
     }

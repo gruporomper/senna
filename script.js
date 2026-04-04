@@ -1480,9 +1480,11 @@ function formatMessage(text, role) {
 // ===== LLM API (Multi-Provider Router) =====
 let lastLLMResponse = null; // stores provider/model info from last call
 
-async function callGrokAPI(userMessage, forceProvider = null, forceModel = null) {
+async function callGrokAPI(userMessage, forceProvider = null, forceModel = null, confirmed = false) {
   const history = appMode !== 'home' ? conversationHistory : perpetualHistory;
-  history.push({ role: 'user', content: userMessage });
+  if (!confirmed) {
+    history.push({ role: 'user', content: userMessage });
+  }
 
   // Sliding window: keep system prompt + last 20 messages
   if (history.length > 21) {
@@ -1495,12 +1497,27 @@ async function callGrokAPI(userMessage, forceProvider = null, forceModel = null)
   const payload = { messages: history };
   if (forceProvider) payload.forceProvider = forceProvider;
   if (forceModel) payload.forceModel = forceModel;
+  if (confirmed) payload.confirmed = true;
 
   const response = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+
+  // Handle 202: budget confirmation required
+  if (response.status === 202) {
+    const data = await response.json();
+    const senna = data._senna;
+    const userConfirmed = await showBudgetConfirmModal(senna);
+    if (userConfirmed) {
+      return callGrokAPI(userMessage, forceProvider, forceModel, true);
+    } else {
+      // Remove the user message we just pushed
+      history.pop();
+      throw new Error('__BUDGET_DECLINED__');
+    }
+  }
 
   if (!response.ok) {
     const err = await response.text();
@@ -1515,6 +1532,11 @@ async function callGrokAPI(userMessage, forceProvider = null, forceModel = null)
   // Store router metadata for UI badge
   lastLLMResponse = data._senna || null;
 
+  // Show budget warning toast if present
+  if (data._senna?.budgetWarning) {
+    showToast(data._senna.budgetWarning, 'warning');
+  }
+
   // Update reference if session mode (array may have been rebuilt)
   if (appMode !== 'home') {
     conversationHistory = history;
@@ -1523,6 +1545,50 @@ async function callGrokAPI(userMessage, forceProvider = null, forceModel = null)
   }
 
   return assistantMessage;
+}
+
+// ===== BUDGET CONFIRMATION MODAL =====
+function showBudgetConfirmModal(senna) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'stamp-modal';
+    overlay.innerHTML = `
+      <div class="stamp-modal-content budget-confirm-modal">
+        <h3 style="color: var(--yellow); margin: 0 0 12px; font-family: 'Orbitron', sans-serif; font-size: 14px;">
+          Confirmacao de Custo
+        </h3>
+        <p style="color: var(--dim); font-size: 13px; margin: 0 0 16px; line-height: 1.5;">
+          Esta consulta e classificada como <strong style="color: var(--yellow);">${senna.complexity?.toUpperCase()}</strong>
+          e pode custar aproximadamente <strong style="color: var(--green);">$${(senna.estimatedCost || 0).toFixed(2)}</strong>.
+        </p>
+        <div style="display: flex; gap: 8px; font-size: 12px; color: var(--dim); margin-bottom: 16px;">
+          <span>Hoje: $${(senna.daily || 0).toFixed(2)}</span>
+          <span>|</span>
+          <span>Mes: $${(senna.monthly || 0).toFixed(2)}</span>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="stamp-submit" id="budgetConfirmBtn" style="flex:1;">Continuar</button>
+          <button class="stamp-submit" id="budgetDeclineBtn" style="flex:1; background: var(--surface); color: var(--dim); border: 1px solid rgba(255,255,255,0.1);">Cancelar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('#budgetConfirmBtn').addEventListener('click', () => {
+      overlay.remove();
+      resolve(true);
+    });
+    overlay.querySelector('#budgetDeclineBtn').addEventListener('click', () => {
+      overlay.remove();
+      resolve(false);
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { overlay.remove(); resolve(false); }
+    });
+    document.addEventListener('keydown', function handler(e) {
+      if (e.key === 'Escape') { overlay.remove(); resolve(false); document.removeEventListener('keydown', handler); }
+    });
+  });
 }
 
 // ===== MODEL BADGE =====
@@ -1582,7 +1648,11 @@ async function processCommand(text, fromVoice = false) {
       }
     } catch (error) {
       console.error('Error:', error);
-      addMessage('Erro ao conectar com a IA. Verifique a conexão.', 'assistant');
+      if (error.message === '__BUDGET_DECLINED__') {
+        showToast('Consulta cancelada pelo limite de custo.', 'warning');
+      } else {
+        addMessage('Erro ao conectar com a IA. Verifique a conexão.', 'assistant');
+      }
       setState('idle');
     }
   } else {
@@ -1617,7 +1687,11 @@ async function processCommand(text, fromVoice = false) {
       }
     } catch (error) {
       console.error('Error:', error);
-      addPerpetualMessage('Erro ao conectar com o Grok. Verifique a conexão.', 'assistant');
+      if (error.message === '__BUDGET_DECLINED__') {
+        showToast('Consulta cancelada pelo limite de custo.', 'warning');
+      } else {
+        addPerpetualMessage('Erro ao conectar com o Grok. Verifique a conexão.', 'assistant');
+      }
       setState('idle');
     }
   }
@@ -2813,12 +2887,12 @@ function openStampModal(configKey) {
 }
 
 // ===== TOAST NOTIFICATION =====
-function showToast(message) {
+function showToast(message, type = 'success') {
   const toast = document.createElement('div');
-  toast.className = 'senna-toast';
+  toast.className = `senna-toast${type === 'warning' ? ' senna-toast-warning' : ''}`;
   toast.textContent = message;
   document.body.appendChild(toast);
-  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 2500);
+  setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
 }
 
 // ===== DASHBOARD WIDGETS =====
