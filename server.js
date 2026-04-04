@@ -668,6 +668,19 @@ http.createServer(async (req, res) => {
       if (!kokoroOk) errors.push('kokoro_tts');
     } catch { checks.kokoro_tts = 'down'; errors.push('kokoro_tts'); }
 
+    // Check n8n
+    try {
+      const n8nOk = await new Promise((resolve) => {
+        const req = http.get('http://localhost:5678/healthz', { timeout: 3000 }, (r) => {
+          resolve(r.statusCode < 500);
+        });
+        req.on('error', () => resolve(false));
+        req.on('timeout', () => { req.destroy(); resolve(false); });
+      });
+      checks.n8n = n8nOk ? 'ok' : 'down';
+      if (!n8nOk) errors.push('n8n');
+    } catch { checks.n8n = 'down'; errors.push('n8n'); }
+
     // Check API keys
     checks.grok = process.env.GROK_API_KEY ? 'configured' : 'missing';
     checks.gemini = process.env.GEMINI_API_KEY ? 'configured' : 'missing';
@@ -682,6 +695,91 @@ http.createServer(async (req, res) => {
 
     res.writeHead(status === 'healthy' ? 200 : 503, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify({ status, uptime, serverStart: SERVER_START_TIME, checks, errors }));
+    return;
+  }
+
+  // ===== AUTOMATION: /api/automate =====
+  // Triggers n8n workflows via webhook
+  if (req.url === '/api/automate' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const parsed = JSON.parse(body);
+      const { action, payload, confirmed } = parsed;
+
+      if (!action) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: 'Missing action' }));
+        return;
+      }
+
+      // Action registry with risk levels
+      const ACTIONS = {
+        send_email: { level: 'L3', n8nWebhook: 'send-email', label: 'Enviar email' },
+        create_event: { level: 'L2', n8nWebhook: 'create-event', label: 'Criar evento' },
+        send_whatsapp: { level: 'L3', n8nWebhook: 'send-whatsapp', label: 'Enviar WhatsApp' },
+      };
+
+      const actionDef = ACTIONS[action];
+      if (!actionDef) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: `Unknown action: ${action}` }));
+        return;
+      }
+
+      // L3+ actions require explicit confirmation
+      if ((actionDef.level === 'L3' || actionDef.level === 'L4') && !confirmed) {
+        res.writeHead(202, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({
+          requiresConfirmation: true,
+          action,
+          label: actionDef.label,
+          level: actionDef.level,
+          payload,
+          message: `Confirmar: ${actionDef.label}? Esta acao nao pode ser desfeita.`
+        }));
+        return;
+      }
+
+      // Forward to n8n webhook
+      const n8nBase = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook';
+      const n8nUrl = new URL(`${n8nBase}/${actionDef.n8nWebhook}`);
+
+      const n8nPayload = JSON.stringify({ ...payload, _senna: { action, timestamp: new Date().toISOString() } });
+      const n8nReq = (n8nUrl.protocol === 'https:' ? https : http).request({
+        hostname: n8nUrl.hostname,
+        port: n8nUrl.port,
+        path: n8nUrl.pathname,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(n8nPayload) },
+        timeout: 30000
+      }, (n8nRes) => {
+        let data = '';
+        n8nRes.on('data', (chunk) => data += chunk);
+        n8nRes.on('end', () => {
+          // Log to Supabase automation_logs
+          logAutomation(action, payload, n8nRes.statusCode < 400 ? 'success' : 'failed', data).catch(() => {});
+
+          res.writeHead(n8nRes.statusCode < 400 ? 200 : 502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify({
+            success: n8nRes.statusCode < 400,
+            action,
+            result: data ? JSON.parse(data) : null
+          }));
+        });
+      });
+
+      n8nReq.on('error', (err) => {
+        logAutomation(action, payload, 'failed', err.message).catch(() => {});
+        res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: `n8n unreachable: ${err.message}` }));
+      });
+
+      n8nReq.write(n8nPayload);
+      n8nReq.end();
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
     return;
   }
 
@@ -782,6 +880,40 @@ async function logCostToSupabase(result) {
     });
     req.on('error', reject);
     req.write(payload);
+    req.end();
+  });
+}
+
+async function logAutomation(action, payload, status, result) {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) return;
+
+  const data = JSON.stringify({
+    user_id: 'marlon',
+    action_type: action,
+    payload: payload || {},
+    status,
+    error_message: status === 'failed' ? (typeof result === 'string' ? result : null) : null,
+    confirmed_by_user: true
+  });
+
+  const url = new URL(`${supabaseUrl}/rest/v1/automation_logs`);
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: url.hostname, port: 443, path: url.pathname, method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', 'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`, 'Prefer': 'return=minimal',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, (res) => {
+      let body = '';
+      res.on('data', c => body += c);
+      res.on('end', () => res.statusCode >= 400 ? reject(new Error(body)) : resolve());
+    });
+    req.on('error', reject);
+    req.write(data);
     req.end();
   });
 }

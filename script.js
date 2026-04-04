@@ -3379,6 +3379,72 @@ function showToast(message, type = 'success') {
   setTimeout(() => { if (toast.parentNode) toast.remove(); }, 3000);
 }
 
+// ===== AUTOMATION (n8n) =====
+async function triggerAutomation(action, payload) {
+  try {
+    const response = await fetch('/api/automate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload })
+    });
+
+    // Requires confirmation (L3+ action)
+    if (response.status === 202) {
+      const data = await response.json();
+      const confirmed = await showAutomationConfirmModal(data);
+      if (!confirmed) {
+        showToast('Acao cancelada.', 'warning');
+        return null;
+      }
+      // Re-send with confirmed flag
+      const confirmRes = await fetch('/api/automate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, payload, confirmed: true })
+      });
+      const result = await confirmRes.json();
+      if (result.success) {
+        showToast(`${data.label} concluido!`);
+      } else {
+        showToast(`Erro: ${result.error || 'Falha na automacao'}`, 'warning');
+      }
+      return result;
+    }
+
+    const result = await response.json();
+    if (result.success) {
+      showToast('Acao concluida!');
+    } else {
+      showToast(`Erro: ${result.error || 'Falha'}`, 'warning');
+    }
+    return result;
+  } catch (err) {
+    showToast(`Erro de conexao: ${err.message}`, 'warning');
+    return null;
+  }
+}
+
+function showAutomationConfirmModal(data) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'budget-confirm-modal';
+    overlay.innerHTML = `
+      <div style="background:var(--surface);border:1px solid rgba(255,215,0,0.15);border-radius:12px;padding:24px;max-width:360px;width:90%;margin:auto;position:relative;top:50%;transform:translateY(-50%);">
+        <h3 style="color:var(--yellow);font-family:Orbitron;font-size:14px;margin:0 0 12px;">Confirmar Acao</h3>
+        <p style="color:var(--text-dim);font-size:13px;margin:0 0 8px;">${data.label}</p>
+        <p style="color:#ff6666;font-size:11px;margin:0 0 16px;">Nivel: ${data.level} — Esta acao nao pode ser desfeita.</p>
+        <div style="display:flex;gap:8px;">
+          <button id="autoConfirm" style="flex:1;padding:10px;background:var(--yellow);color:var(--bg);border:none;border-radius:8px;font-weight:600;cursor:pointer;">Confirmar</button>
+          <button id="autoCancel" style="flex:1;padding:10px;background:rgba(255,255,255,0.05);color:var(--text-dim);border:1px solid rgba(255,255,255,0.1);border-radius:8px;cursor:pointer;">Cancelar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#autoConfirm').onclick = () => { overlay.remove(); resolve(true); };
+    overlay.querySelector('#autoCancel').onclick = () => { overlay.remove(); resolve(false); };
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) { overlay.remove(); resolve(false); } });
+  });
+}
+
 // ===== DASHBOARD WIDGETS =====
 
 function initDashboard() {
