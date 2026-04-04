@@ -211,6 +211,9 @@
         this.transition('LISTENING');
         this._showRecordingUI();
 
+        // Keep controls hidden during voice conversation
+        document.body.classList.add('voice-active');
+
       } catch (err) {
         console.error('[VoiceEngine] Activation failed:', err);
         this.cleanup();
@@ -220,6 +223,7 @@
 
     deactivate() {
       console.log('[VoiceEngine] Deactivating...');
+      document.body.classList.remove('voice-active');
       this.flushTTSQueue();
       this.cleanup();
       this.sentenceBuffer = '';

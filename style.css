@@ -1887,6 +1887,10 @@ body.mode-home .controls { display: none; }
 body.mode-home .perpetual-greeting { display: none; }
 .box-voice-controls { display: none; }
 
+/* When voice engine is active, keep controls hidden and toolbar visible */
+body.voice-active .box-voice-controls { display: flex; }
+body.voice-active .controls { display: none; }
+
 /* --- Media Toolbar --- */
 .media-toolbar {
   display: flex;
