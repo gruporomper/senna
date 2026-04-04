@@ -884,14 +884,62 @@ const SessionManager = {
   getContextPack(id) {
     const session = this.get(id);
     if (!session) return null;
-    return {
-      sourceSessionId: session.id,
-      sourceTitle: session.title,
-      summary: session.summary || `Sessão "${session.title}" com ${session.messages.length} mensagens.`,
-      messageCount: session.messages.length,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt
-    };
+    const userMsgs = session.messages.filter(m => m.role === 'user');
+    const assistantMsgs = session.messages.filter(m => m.role === 'assistant');
+    const lastUserMsg = userMsgs.length > 0 ? userMsgs[userMsgs.length - 1].content.substring(0, 200) : '';
+    const lastAssistantMsg = assistantMsgs.length > 0 ? assistantMsgs[assistantMsgs.length - 1].content.substring(0, 200) : '';
+
+    let pack = `## Contexto importado: "${session.title}"\n`;
+    if (session.label) pack += `Etiqueta: ${session.label.name}\n`;
+    pack += `Criada: ${session.createdAt} | Atualizada: ${session.updatedAt}\n`;
+    pack += `Mensagens: ${session.messages.length} (${userMsgs.length} do usuário, ${assistantMsgs.length} do assistente)\n`;
+    if (session.summary) {
+      pack += `\n### Resumo\n${session.summary}\n`;
+    }
+    if (lastUserMsg) {
+      pack += `\n### Última pergunta\n${lastUserMsg}\n`;
+    }
+    if (lastAssistantMsg) {
+      pack += `\n### Última resposta\n${lastAssistantMsg}\n`;
+    }
+    return pack;
+  },
+
+  async generateSummary(id) {
+    const session = this.get(id);
+    if (!session || session.messages.length < 2) return null;
+    const msgs = session.messages
+      .filter(m => m.role !== 'system')
+      .slice(0, 20)
+      .map(m => `${m.role === 'user' ? 'Usuário' : 'SENNA'}: ${m.content.substring(0, 150)}`)
+      .join('\n');
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            { role: 'system', content: 'Resuma esta conversa em 1-2 frases curtas em português. Seja direto e objetivo. Retorne apenas o resumo, nada mais.' },
+            { role: 'user', content: msgs }
+          ],
+          forceProvider: 'grok',
+          forceModel: 'grok-3-mini-fast'
+        })
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const summary = data.choices[0].message.content.trim();
+      const all = this.getAll(true);
+      const s = all.find(x => x.id === id);
+      if (s) {
+        s.summary = summary;
+        this.saveAll(all);
+      }
+      return summary;
+    } catch (e) {
+      console.error('[SENNA] Summary generation failed:', e);
+      return null;
+    }
   },
 
   formatDate(dateStr) {
@@ -1473,6 +1521,9 @@ function showConvContextMenu(event, session) {
           SessionManager.unarchive(session.id);
         } else {
           SessionManager.archive(session.id);
+          if (!session.summary) {
+            SessionManager.generateSummary(session.id);
+          }
           if (session.id === activeConversationId) {
             newChat();
           }
@@ -3522,6 +3573,10 @@ function searchByKeyword(query) {
   const results = all.filter(conv => {
     // Search in title
     if (conv.title.toLowerCase().includes(q)) return true;
+    // Search in label
+    if (conv.label && conv.label.name.toLowerCase().includes(q)) return true;
+    // Search in summary
+    if (conv.summary && conv.summary.toLowerCase().includes(q)) return true;
     // Search in message content
     return conv.messages.some(m =>
       m.role !== 'system' && m.content.toLowerCase().includes(q)
@@ -3645,13 +3700,20 @@ function renderSearchItem(conv, highlightQuery = '', preview = '') {
     );
   }
 
+  const labelBadge = conv.label
+    ? `<span class="session-label" style="background:${conv.label.color}">${escapeHtml(conv.label.name)}</span>`
+    : '';
+  const summaryLine = (!preview && conv.summary)
+    ? `<div class="search-result-preview">${escapeHtml(conv.summary.substring(0, 100))}</div>`
+    : '';
+
   return `<div class="search-result-item" data-conv-id="${conv.id}">
     <svg class="search-result-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
     </svg>
     <div class="search-result-text">
-      <div class="search-result-title">${title}</div>
-      ${preview ? `<div class="search-result-preview">${preview}</div>` : ''}
+      <div class="search-result-title">${title}${labelBadge}</div>
+      ${preview ? `<div class="search-result-preview">${preview}</div>` : summaryLine}
     </div>
     <span class="search-result-date">${ConversationManager.formatDate(conv.updatedAt)}</span>
   </div>`;
