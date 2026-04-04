@@ -34,6 +34,7 @@
 
     // Timeouts
     sttIdleTimeoutMs: 30000, // close STT socket after 30s silence
+    sttTurnCommitMs: 1500, // commit turn after 1.5s silence following a final transcript
     errorRecoveryMs: 3000, // auto-recover from ERROR after 3s
     bargeInCooldownMs: 100, // min time between barge-in events
 
@@ -102,6 +103,9 @@
     nextPlayTime: 0,
     ttsAudioContext: null,     // dedicated AudioContext for TTS playback
     ttsSpeakAnalyser: null,    // for helmet pulse animation
+
+    // --- Turn commit ---
+    turnCommitTimer: null,
 
     // --- Sentence accumulator ---
     sentenceBuffer: '',
@@ -318,12 +322,12 @@
         await this.audioContext.audioWorklet.addModule(CONFIG.audioWorkletPath);
 
         const source = this.audioContext.createMediaStreamSource(this.micStream);
-        this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-processor');
+        this.workletNode = new AudioWorkletNode(this.audioContext, 'audio-processor');
 
         // Receive PCM buffers from worklet
         this.workletNode.port.onmessage = (e) => {
-          const pcmData = e.data; // Int16Array
-          this.sendAudioToSTT(pcmData);
+          const pcmData = e.data.pcm16; // Int16Array from worklet
+          if (pcmData) this.sendAudioToSTT(pcmData);
         };
 
         source.connect(this.workletNode);
@@ -377,7 +381,7 @@
       const data = await resp.json();
       if (data.error) throw new Error(`STT token error: ${data.error}`);
       this.sttToken = data.token;
-      this.sttTokenExpiresAt = Date.now() + (data.expires_in || 3600) * 1000;
+      this.sttTokenExpiresAt = data.expires_at || (Date.now() + 3600000);
       this._mark('stt_token_end');
     },
 
@@ -482,18 +486,10 @@
           return;
         }
 
-        // Use FinalTranscript + silence as turn commit signal
-        // AssemblyAI sends end_utterance event
-        if (msg.message_type === 'FinalTranscript' && msg.text && msg.text.trim()) {
-          // After receiving a final transcript, wait for potential continuation
-          // The end_utterance_silence_threshold handles this server-side
-          // We commit on the next silence period (handled by STT config)
-        }
-
-        // Detect turn end via punctuation in final transcript
-        if (msg.message_type === 'FinalTranscript' && this.sttTranscript.trim()) {
-          // AssemblyAI's end_utterance_silence_threshold will stop sending
-          // and the silence triggers our commit via idle timer below
+        // Start turn-commit timer after each FinalTranscript
+        // If no more speech arrives within sttTurnCommitMs, commit the turn
+        if (msg.message_type === 'FinalTranscript' && this.sttTranscript.trim() && this.state === 'LISTENING') {
+          this._resetTurnCommitTimer();
         }
 
       } catch (err) {
@@ -514,6 +510,19 @@
           this.deactivate();
         }
       }, CONFIG.sttIdleTimeoutMs);
+    },
+
+    _resetTurnCommitTimer() {
+      if (this.turnCommitTimer) clearTimeout(this.turnCommitTimer);
+      this.turnCommitTimer = setTimeout(() => {
+        if (this.state === 'LISTENING' && this.sttTranscript.trim()) {
+          this.commitTurn(this.sttTranscript.trim());
+        }
+      }, CONFIG.sttTurnCommitMs);
+    },
+
+    _clearTurnCommitTimer() {
+      if (this.turnCommitTimer) { clearTimeout(this.turnCommitTimer); this.turnCommitTimer = null; }
     },
 
     sendAudioToSTT(pcmData) {
@@ -537,7 +546,8 @@
 
       console.log('[VoiceEngine] Committing turn:', text.substring(0, 50) + '...');
 
-      // Clear transcript
+      // Clear timers and transcript
+      this._clearTurnCommitTimer();
       this.sttTranscript = '';
       this.sttPartial = '';
       if (typeof removeLiveTranscript === 'function') removeLiveTranscript();
@@ -621,8 +631,8 @@
 
         // If no TTS chunks were enqueued (very short response), transition directly
         if (this.ttsQueue.length === 0 && this.state === 'THINKING') {
-          this.transition(walkieTalkieMode ? 'LISTENING' : 'IDLE');
-          if (!walkieTalkieMode) this._hideRecordingUI();
+          this.transition(window.walkieTalkieMode ? 'LISTENING' : 'IDLE');
+          if (!window.walkieTalkieMode) this._hideRecordingUI();
         }
 
       } catch (err) {
@@ -785,7 +795,7 @@
           if (typeof stopSpeakingAnimation === 'function') stopSpeakingAnimation();
           if (typeof resetHelmetPulse === 'function') resetHelmetPulse();
 
-          if (walkieTalkieMode) {
+          if (window.walkieTalkieMode) {
             this.transition('LISTENING');
           } else {
             this.deactivate();
@@ -921,6 +931,7 @@
       if (this.state !== 'SPEAKING' && this.state !== 'THINKING') return;
 
       console.log('[VoiceEngine] BARGE-IN');
+      this._clearTurnCommitTimer();
       this.metrics.bargeInCount++;
 
       // 1. Stop current TTS playback
