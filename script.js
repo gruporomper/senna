@@ -3258,6 +3258,9 @@ function updatePerpetualGreeting() {
 function renderQuickActions() {
   const container = document.getElementById('quickActions');
   if (!container) return;
+  // Stamps disabled
+  container.classList.add('hidden');
+  return;
 
   // Only show on home with no messages
   if (appMode !== 'home' || perpetualMessages.children.length > 0) {
