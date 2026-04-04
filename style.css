@@ -259,60 +259,6 @@ html, body {
 }
 
 /* Nav Row with actions */
-.sidebar-nav-row {
-  display: flex;
-  align-items: center;
-  position: relative;
-}
-
-.sidebar-nav-row .sidebar-nav-item {
-  flex: 1;
-}
-
-.sidebar-nav-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding-right: 8px;
-}
-
-.sidebar-nav-action {
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  transition: background 0.12s, color 0.12s;
-}
-
-.sidebar-nav-action svg {
-  width: 14px;
-  height: 14px;
-}
-
-.sidebar-nav-action:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--text);
-}
-
-.sidebar-nav-chevron.expanded svg {
-  transform: rotate(180deg);
-}
-
-.sidebar-nav-chevron svg {
-  transition: transform 0.2s;
-}
-
-.sidebar.collapsed .sidebar-nav-actions {
-  display: none;
-}
-
 /* Section Label */
 .sidebar-section-label {
   padding: 8px 20px 4px;
@@ -451,6 +397,99 @@ html, body {
   height: 1px;
   background: rgba(255, 215, 0, 0.06);
   margin: 4px 0;
+}
+
+/* Session Label Badge */
+.session-label {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  color: #fff;
+  margin-left: 6px;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+
+/* Pinned List */
+.pinned-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Empty State */
+.conv-list-empty {
+  text-align: center;
+  color: rgba(255, 215, 0, 0.25);
+  font-size: 12px;
+  padding: 24px 16px;
+  font-family: 'Orbitron', sans-serif;
+  letter-spacing: 0.5px;
+}
+
+/* Label Picker */
+.label-picker {
+  position: fixed;
+  background: var(--bg-secondary, #111);
+  border: 1px solid rgba(255, 215, 0, 0.12);
+  border-radius: 10px;
+  padding: 6px;
+  min-width: 160px;
+  z-index: 10001;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+.label-picker-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 215, 0, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 10px 4px;
+  font-family: 'Orbitron', sans-serif;
+}
+
+.label-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.label-picker-item:hover {
+  background: rgba(255, 215, 0, 0.06);
+}
+
+.label-picker-item.active {
+  background: rgba(255, 215, 0, 0.08);
+}
+
+.label-picker-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.label-picker-check {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.label-picker-remove {
+  color: rgba(255, 100, 100, 0.7);
+  font-size: 12px;
 }
 
 /* Profile Button */

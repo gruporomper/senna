@@ -588,26 +588,109 @@ ${typeof BUSINESS_CONTEXT !== 'undefined' ? BUSINESS_CONTEXT : ''}
 
 You know everything about Grupo Romper. Use that knowledge for contextualized, strategic, no-holds-barred answers. Go as deep and long as needed.`;
 
-// ===== CONVERSATION MANAGER (localStorage) =====
-const ConversationManager = {
-  STORAGE_KEY: 'senna_conversations',
+// ===== SESSION MANAGER (localStorage) =====
+// Replaces ConversationManager with richer session model
+const SessionManager = {
+  STORAGE_KEY: 'senna_sessions',
+  LEGACY_KEY: 'senna_conversations',
   ACTIVE_KEY: 'senna_active_id',
-  MAX_CONVERSATIONS: 50,
+  MAX_SESSIONS: 50,
+  _migrated: false,
 
-  getAll(includeArchived = false) {
-    try {
-      const all = JSON.parse(localStorage.getItem(this.STORAGE_KEY) || '[]');
-      if (includeArchived) return all;
-      return all.filter(c => !c.archived);
-    } catch { return []; }
+  // --- UUID generator ---
+  uuid() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
   },
 
-  saveAll(conversations) {
-    // Keep max limit
-    if (conversations.length > this.MAX_CONVERSATIONS) {
-      conversations = conversations.slice(0, this.MAX_CONVERSATIONS);
+  // --- Migration from old format ---
+  _migrate(item) {
+    if (item._migrated) return item;
+    return {
+      id: item.id && item.id.startsWith('conv_') ? this.uuid() : (item.id || this.uuid()),
+      _legacyId: item.id, // keep for reference
+      title: item.title || 'Nova sessão',
+      status: item.archived ? 'archived' : 'active',
+      isPinned: !!item.pinned,
+      pinnedOrder: item.pinnedOrder ?? null,
+      label: item.label || null,
+      createdAt: item.createdAt || new Date().toISOString(),
+      updatedAt: item.updatedAt || new Date().toISOString(),
+      driveFileId: item.driveFileId || null,
+      driveVersion: item.driveVersion || null,
+      summary: item.summary || null,
+      contextRefs: item.contextRefs || [],
+      messages: (item.messages || []).map(m => ({
+        id: m.id || this.uuid(),
+        role: m.role,
+        createdAt: m.createdAt || new Date().toISOString(),
+        content: m.content
+      })),
+      objective: item.objective || null,
+      titleLocked: !!item.titleLocked,
+      _migrated: true
+    };
+  },
+
+  _loadAndMigrate() {
+    let data = [];
+    try {
+      const raw = localStorage.getItem(this.STORAGE_KEY);
+      if (raw) {
+        data = JSON.parse(raw);
+      } else {
+        // Try legacy key
+        const legacy = localStorage.getItem(this.LEGACY_KEY);
+        if (legacy) data = JSON.parse(legacy);
+      }
+    } catch { data = []; }
+
+    // Build ID mapping for active ID migration
+    const idMap = {};
+    let needsMigration = false;
+
+    data = data.map(item => {
+      if (!item._migrated) {
+        needsMigration = true;
+        const migrated = this._migrate(item);
+        if (item.id !== migrated.id) {
+          idMap[item.id] = migrated.id;
+        }
+        return migrated;
+      }
+      return item;
+    });
+
+    if (needsMigration) {
+      // Migrate active ID
+      const activeId = localStorage.getItem(this.ACTIVE_KEY);
+      if (activeId && idMap[activeId]) {
+        localStorage.setItem(this.ACTIVE_KEY, idMap[activeId]);
+      }
+      this.saveAll(data);
     }
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(conversations));
+
+    return data;
+  },
+
+  getAll(includeArchived = false) {
+    const all = this._loadAndMigrate();
+    if (includeArchived) return all;
+    return all.filter(s => s.status !== 'archived');
+  },
+
+  saveAll(sessions) {
+    if (sessions.length > this.MAX_SESSIONS) {
+      // Keep pinned + most recent
+      const pinned = sessions.filter(s => s.isPinned);
+      const rest = sessions.filter(s => !s.isPinned)
+        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+        .slice(0, this.MAX_SESSIONS - pinned.length);
+      sessions = [...pinned, ...rest];
+    }
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(sessions));
   },
 
   getActiveId() {
@@ -619,33 +702,49 @@ const ConversationManager = {
   },
 
   create() {
-    const id = 'conv_' + Date.now();
-    const conv = {
+    const id = this.uuid();
+    const session = {
       id,
-      title: 'Nova conversa',
-      messages: [],
+      title: 'Nova sessão',
+      status: 'active',
+      isPinned: false,
+      pinnedOrder: null,
+      label: null,
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      driveFileId: null,
+      driveVersion: null,
+      summary: null,
+      contextRefs: [],
+      messages: [],
+      objective: null,
+      titleLocked: false,
+      _migrated: true
     };
-    const all = this.getAll();
-    all.unshift(conv);
+    const all = this.getAll(true);
+    all.unshift(session);
     this.saveAll(all);
     this.setActiveId(id);
-    return conv;
+    return session;
   },
 
   save(id, messages) {
-    const all = this.getAll();
-    const conv = all.find(c => c.id === id);
-    if (conv) {
-      conv.messages = messages.filter(m => m.role !== 'system');
-      conv.updatedAt = new Date().toISOString();
+    const all = this.getAll(true);
+    const session = all.find(s => s.id === id);
+    if (session) {
+      session.messages = messages.filter(m => m.role !== 'system').map(m => ({
+        id: m.id || this.uuid(),
+        role: m.role,
+        createdAt: m.createdAt || new Date().toISOString(),
+        content: m.content
+      }));
+      session.updatedAt = new Date().toISOString();
       // Auto-title from first user message (unless locked)
-      if (!conv.titleLocked && conv.title === 'Nova conversa') {
+      if (!session.titleLocked && (session.title === 'Nova sessão' || session.title === 'Nova conversa')) {
         const firstUser = messages.find(m => m.role === 'user');
         if (firstUser) {
-          conv.title = firstUser.content.substring(0, 45);
-          if (firstUser.content.length > 45) conv.title += '...';
+          session.title = firstUser.content.substring(0, 45);
+          if (firstUser.content.length > 45) session.title += '...';
         }
       }
       this.saveAll(all);
@@ -653,8 +752,8 @@ const ConversationManager = {
   },
 
   delete(id) {
-    let all = this.getAll();
-    all = all.filter(c => c.id !== id);
+    let all = this.getAll(true);
+    all = all.filter(s => s.id !== id);
     this.saveAll(all);
     if (this.getActiveId() === id) {
       localStorage.removeItem(this.ACTIVE_KEY);
@@ -662,7 +761,137 @@ const ConversationManager = {
   },
 
   get(id) {
-    return this.getAll().find(c => c.id === id);
+    return this.getAll(true).find(s => s.id === id);
+  },
+
+  // --- Pin/Unpin ---
+  togglePin(id) {
+    const all = this.getAll(true);
+    const session = all.find(s => s.id === id);
+    if (!session) return;
+    session.isPinned = !session.isPinned;
+    if (session.isPinned) {
+      const maxOrder = Math.max(0, ...all.filter(s => s.isPinned && s.id !== id).map(s => s.pinnedOrder || 0));
+      session.pinnedOrder = maxOrder + 1;
+    } else {
+      session.pinnedOrder = null;
+    }
+    this.saveAll(all);
+  },
+
+  // --- Archive / Unarchive ---
+  archive(id) {
+    const all = this.getAll(true);
+    const session = all.find(s => s.id === id);
+    if (!session) return;
+    session.status = 'archived';
+    session.isPinned = false;
+    session.pinnedOrder = null;
+    this.saveAll(all);
+    if (this.getActiveId() === id) {
+      localStorage.removeItem(this.ACTIVE_KEY);
+    }
+  },
+
+  unarchive(id) {
+    const all = this.getAll(true);
+    const session = all.find(s => s.id === id);
+    if (!session) return;
+    session.status = 'active';
+    session.updatedAt = new Date().toISOString();
+    this.saveAll(all);
+  },
+
+  // --- Labels ---
+  setLabel(id, label) {
+    const all = this.getAll(true);
+    const session = all.find(s => s.id === id);
+    if (!session) return;
+    session.label = label; // { name, color } or null
+    this.saveAll(all);
+  },
+
+  // --- Reorder pinned ---
+  reorderPinned(orderedIds) {
+    const all = this.getAll(true);
+    orderedIds.forEach((id, idx) => {
+      const s = all.find(x => x.id === id);
+      if (s) s.pinnedOrder = idx + 1;
+    });
+    this.saveAll(all);
+  },
+
+  // --- Sorted getters ---
+  getPinned() {
+    return this.getAll().filter(s => s.isPinned)
+      .sort((a, b) => (a.pinnedOrder || 0) - (b.pinnedOrder || 0));
+  },
+
+  getActive() {
+    return this.getAll().filter(s => !s.isPinned)
+      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  },
+
+  // --- .senna.json serialization ---
+  serialize(id) {
+    const session = this.get(id);
+    if (!session) return null;
+    const { messages, ...meta } = session;
+    return {
+      kind: 'senna.session',
+      formatVersion: '1.0.0',
+      session: meta,
+      messages: messages,
+      integrity: {
+        messageCount: messages.length,
+        exportedAt: new Date().toISOString()
+      }
+    };
+  },
+
+  parse(json) {
+    if (!json || json.kind !== 'senna.session') throw new Error('Invalid .senna.json: missing kind');
+    if (!json.formatVersion) throw new Error('Invalid .senna.json: missing formatVersion');
+    if (!json.session) throw new Error('Invalid .senna.json: missing session');
+    if (!Array.isArray(json.messages)) throw new Error('Invalid .senna.json: missing messages');
+    if (json.integrity && json.integrity.messageCount !== json.messages.length) {
+      console.warn('[SessionManager] Message count mismatch in .senna.json');
+    }
+    return {
+      ...json.session,
+      messages: json.messages,
+      _migrated: true
+    };
+  },
+
+  // --- Import session (from .senna.json) ---
+  importSession(sessionData) {
+    const all = this.getAll(true);
+    // Check for duplicate
+    const existing = all.find(s => s.id === sessionData.id);
+    if (existing) {
+      Object.assign(existing, sessionData);
+      existing.status = 'active';
+    } else {
+      sessionData.status = 'active';
+      all.unshift(sessionData);
+    }
+    this.saveAll(all);
+    return sessionData;
+  },
+
+  // --- Context Pack ---
+  getContextPack(id) {
+    const session = this.get(id);
+    if (!session) return null;
+    return {
+      sourceSessionId: session.id,
+      sourceTitle: session.title,
+      summary: session.summary || `Sessão "${session.title}" com ${session.messages.length} mensagens.`,
+      messageCount: session.messages.length,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt
+    };
   },
 
   formatDate(dateStr) {
@@ -678,6 +907,9 @@ const ConversationManager = {
     return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   }
 };
+
+// Backward compatibility alias
+const ConversationManager = SessionManager;
 
 // ===== MEMORY BANK =====
 const MemoryBank = {
@@ -929,53 +1161,92 @@ sidebarToggle.addEventListener('click', toggleSidebar);
 document.querySelector('.helmet-icon')?.addEventListener('click', toggleSidebar);
 sidebarOverlay.addEventListener('click', closeSidebar);
 
-// ===== CONVERSATION LIST RENDERING =====
+// ===== SESSION LIST RENDERING =====
 function renderConversationList() {
-  const all = ConversationManager.getAll();
   conversationListEl.innerHTML = '';
 
-  all.forEach(conv => {
-    const isPinned = conv.pinned;
-    const el = document.createElement('div');
-    el.className = 'conv-item' + (conv.id === activeConversationId ? ' active' : '');
-    el.innerHTML = `
-      <div class="conv-item-text">
-        <div class="conv-item-title">${isPinned ? '📌 ' : ''}${escapeHtml(conv.title)}</div>
-        <div class="conv-item-date">${ConversationManager.formatDate(conv.updatedAt)}</div>
-      </div>
-      <button class="conv-item-menu-btn" title="Opções">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-          <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
-          <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
-          <circle cx="12" cy="19" r="1.5" fill="currentColor"/>
-        </svg>
-      </button>
-    `;
+  const pinned = SessionManager.getPinned();
+  const active = SessionManager.getActive();
 
-    el.querySelector('.conv-item-text').addEventListener('click', () => {
-      loadConversation(conv.id);
-      closeSidebar();
-    });
+  // --- Fixadas section ---
+  if (pinned.length > 0) {
+    const header = document.createElement('div');
+    header.className = 'sidebar-section-label';
+    header.textContent = 'Fixadas';
+    conversationListEl.appendChild(header);
 
-    el.querySelector('.conv-item-menu-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      showConvContextMenu(e, conv);
-    });
+    const pinnedContainer = document.createElement('div');
+    pinnedContainer.className = 'pinned-list';
+    pinnedContainer.id = 'pinnedList';
+    pinned.forEach(s => pinnedContainer.appendChild(_createSessionItem(s)));
+    conversationListEl.appendChild(pinnedContainer);
+  }
 
-    conversationListEl.appendChild(el);
+  // --- Ativas section ---
+  if (active.length > 0) {
+    const header = document.createElement('div');
+    header.className = 'sidebar-section-label';
+    header.textContent = 'Ativas';
+    conversationListEl.appendChild(header);
+
+    active.forEach(s => conversationListEl.appendChild(_createSessionItem(s)));
+  }
+
+  if (pinned.length === 0 && active.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'conv-list-empty';
+    empty.textContent = 'Nenhuma sessão';
+    conversationListEl.appendChild(empty);
+  }
+}
+
+function _createSessionItem(session) {
+  const el = document.createElement('div');
+  el.className = 'conv-item' + (session.id === activeConversationId ? ' active' : '');
+  el.dataset.sessionId = session.id;
+
+  const labelHtml = session.label
+    ? `<span class="session-label" style="background:${session.label.color}">${escapeHtml(session.label.name)}</span>`
+    : '';
+
+  el.innerHTML = `
+    <div class="conv-item-text">
+      <div class="conv-item-title">${escapeHtml(session.title)}${labelHtml}</div>
+      <div class="conv-item-date">${SessionManager.formatDate(session.updatedAt)}</div>
+    </div>
+    <button class="conv-item-menu-btn" title="Opções">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="5" r="1.5" fill="currentColor"/>
+        <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+        <circle cx="12" cy="19" r="1.5" fill="currentColor"/>
+      </svg>
+    </button>
+  `;
+
+  el.querySelector('.conv-item-text').addEventListener('click', () => {
+    loadConversation(session.id);
+    closeSidebar();
   });
+
+  el.querySelector('.conv-item-menu-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    showConvContextMenu(e, session);
+  });
+
+  return el;
 }
 
 // ===== CONVERSATION CONTEXT MENU =====
 let activeContextMenu = null;
 
-function showConvContextMenu(event, conv) {
+function showConvContextMenu(event, session) {
   closeContextMenu();
 
   const menu = document.createElement('div');
   menu.className = 'conv-context-menu';
 
-  const isPinned = conv.pinned;
+  const isPinned = session.isPinned;
+  const isArchived = session.status === 'archived';
 
   menu.innerHTML = `
     <button class="conv-context-menu-item" data-action="share">
@@ -985,15 +1256,6 @@ function showConvContextMenu(event, conv) {
         <line x1="12" y1="2" x2="12" y2="15"/>
       </svg>
       Compartilhar
-    </button>
-    <button class="conv-context-menu-item" data-action="group">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-        <circle cx="9" cy="7" r="4"/>
-        <path d="M23 21v-2a4 4 0 00-3-3.87"/>
-        <path d="M16 3.13a4 4 0 010 7.75"/>
-      </svg>
-      Iniciar chat em grupo
     </button>
     <button class="conv-context-menu-item" data-action="rename">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1006,7 +1268,23 @@ function showConvContextMenu(event, conv) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M12 17v5M9 2h6l-1 7h4l-7 8 1-5H8l1-10z"/>
       </svg>
-      ${isPinned ? 'Desafixar chat' : 'Fixar chat'}
+      ${isPinned ? 'Desafixar' : 'Fixar'}
+    </button>
+    <button class="conv-context-menu-item" data-action="label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
+        <line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
+      Etiquetar
+    </button>
+    <button class="conv-context-menu-item" data-action="context">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+      Importar contexto
     </button>
     <button class="conv-context-menu-item" data-action="archive">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1014,7 +1292,7 @@ function showConvContextMenu(event, conv) {
         <rect x="1" y="3" width="22" height="5"/>
         <line x1="10" y1="12" x2="14" y2="12"/>
       </svg>
-      Arquivar
+      ${isArchived ? 'Desarquivar' : 'Arquivar'}
     </button>
     <div class="conv-context-menu-separator"></div>
     <button class="conv-context-menu-item danger" data-action="delete">
@@ -1053,55 +1331,60 @@ function showConvContextMenu(event, conv) {
 
     switch (action) {
       case 'share':
-        // Copy conversation to clipboard
-        const convData = ConversationManager.get(conv.id);
+        const convData = SessionManager.get(session.id);
         if (convData) {
           const text = convData.messages
             .filter(m => m.role !== 'system')
             .map(m => `${m.role === 'user' ? 'Eu' : 'SENNA'}: ${m.content}`)
             .join('\n\n');
-          navigator.clipboard.writeText(text).then(() => {
-            // Brief feedback could be added here
-          });
+          navigator.clipboard.writeText(text);
         }
         break;
 
       case 'rename':
-        const newTitle = prompt('Novo nome:', conv.title);
+        const newTitle = prompt('Novo nome:', session.title);
         if (newTitle && newTitle.trim()) {
-          const all = ConversationManager.getAll();
-          const c = all.find(x => x.id === conv.id);
+          const all = SessionManager.getAll();
+          const c = all.find(x => x.id === session.id);
           if (c) {
             c.title = newTitle.trim();
-            ConversationManager.saveAll(all);
+            c.titleLocked = true;
+            SessionManager.saveAll(all);
           }
         }
         break;
 
       case 'pin':
-        const allP = ConversationManager.getAll();
-        const cp = allP.find(x => x.id === conv.id);
-        if (cp) {
-          cp.pinned = !cp.pinned;
-          ConversationManager.saveAll(allP);
+        SessionManager.togglePin(session.id);
+        break;
+
+      case 'label':
+        showLabelPicker(session.id, btnRect);
+        break;
+
+      case 'context':
+        const pack = SessionManager.getContextPack(session.id);
+        if (pack) {
+          navigator.clipboard.writeText(pack).then(() => {
+            console.log('[SENNA] Context pack copiado para clipboard');
+          });
         }
         break;
 
       case 'archive':
-        const allA = ConversationManager.getAll();
-        const ca = allA.find(x => x.id === conv.id);
-        if (ca) {
-          ca.archived = true;
-          ConversationManager.saveAll(allA);
-          if (conv.id === activeConversationId) {
+        if (isArchived) {
+          SessionManager.unarchive(session.id);
+        } else {
+          SessionManager.archive(session.id);
+          if (session.id === activeConversationId) {
             newChat();
           }
         }
         break;
 
       case 'delete':
-        ConversationManager.delete(conv.id);
-        if (conv.id === activeConversationId) {
+        SessionManager.delete(session.id);
+        if (session.id === activeConversationId) {
           newChat();
         }
         break;
@@ -1114,6 +1397,78 @@ function showConvContextMenu(event, conv) {
   // Close on click outside
   setTimeout(() => {
     document.addEventListener('click', closeContextMenuOnOutside);
+  }, 0);
+}
+
+// ===== LABEL PICKER =====
+const LABEL_PRESETS = [
+  { name: 'Trabalho', color: '#3b82f6' },
+  { name: 'Pessoal', color: '#8b5cf6' },
+  { name: 'Projeto', color: '#10b981' },
+  { name: 'Estudo', color: '#f59e0b' },
+  { name: 'Ideia', color: '#ec4899' },
+  { name: 'Urgente', color: '#ef4444' },
+];
+
+function showLabelPicker(sessionId, anchorRect) {
+  // Remove any existing picker
+  const old = document.querySelector('.label-picker');
+  if (old) old.remove();
+
+  const session = SessionManager.getAll().find(s => s.id === sessionId);
+  if (!session) return;
+
+  const picker = document.createElement('div');
+  picker.className = 'label-picker';
+
+  let html = '<div class="label-picker-title">Etiquetar</div>';
+  LABEL_PRESETS.forEach(preset => {
+    const isActive = session.label && session.label.name === preset.name;
+    html += `<button class="label-picker-item${isActive ? ' active' : ''}" data-name="${preset.name}" data-color="${preset.color}">
+      <span class="label-picker-dot" style="background:${preset.color}"></span>
+      ${preset.name}
+      ${isActive ? '<span class="label-picker-check">✓</span>' : ''}
+    </button>`;
+  });
+  if (session.label) {
+    html += '<div class="conv-context-menu-separator"></div>';
+    html += '<button class="label-picker-item label-picker-remove" data-name="__remove">Remover etiqueta</button>';
+  }
+  picker.innerHTML = html;
+
+  picker.style.top = anchorRect.bottom + 4 + 'px';
+  picker.style.left = anchorRect.left + 'px';
+
+  document.body.appendChild(picker);
+
+  requestAnimationFrame(() => {
+    const r = picker.getBoundingClientRect();
+    if (r.right > window.innerWidth) picker.style.left = (window.innerWidth - r.width - 8) + 'px';
+    if (r.bottom > window.innerHeight) picker.style.top = (anchorRect.top - r.height - 4) + 'px';
+  });
+
+  picker.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-name]');
+    if (!item) return;
+    const name = item.dataset.name;
+    if (name === '__remove') {
+      SessionManager.setLabel(sessionId, null);
+    } else {
+      const color = item.dataset.color;
+      SessionManager.setLabel(sessionId, { name, color });
+    }
+    picker.remove();
+    renderConversationList();
+  });
+
+  setTimeout(() => {
+    const closePicker = (e) => {
+      if (!picker.contains(e.target)) {
+        picker.remove();
+        document.removeEventListener('click', closePicker);
+      }
+    };
+    document.addEventListener('click', closePicker);
   }, 0);
 }
 
