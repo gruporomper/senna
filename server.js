@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const { routeMessage, parsePrefix, classifyComplexity, estimateCost } = require('./llm-router');
+const memory = require('./memory-engine');
 
 // Load .env
 const envPath = path.join(__dirname, '.env');
@@ -145,7 +146,7 @@ http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type'
     });
     res.end();
@@ -241,7 +242,35 @@ http.createServer(async (req, res) => {
         return;
       }
 
-      const result = await routeMessage(messages, process.env, {
+      // Inject memory context into system prompt (if not a forced internal call)
+      const enrichedMessages = [...messages];
+      if (!forceProvider || forceProvider !== 'grok') {
+        try {
+          const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+          if (lastUserMsg) {
+            const memCtx = await memory.retrieveContext(
+              lastUserMsg.content,
+              { user_id: userId, agent_id: 'senna_core' },
+              process.env
+            );
+            if (memCtx.context && memCtx.memoriesUsed > 0) {
+              // Append memory context to system prompt
+              const sysIdx = enrichedMessages.findIndex(m => m.role === 'system');
+              if (sysIdx >= 0) {
+                enrichedMessages[sysIdx] = {
+                  ...enrichedMessages[sysIdx],
+                  content: enrichedMessages[sysIdx].content + memCtx.context
+                };
+              }
+              console.log(`[MEMORY] Injected ${memCtx.memoriesUsed} memories into context`);
+            }
+          }
+        } catch (memErr) {
+          console.error('[MEMORY] Retrieval failed (non-blocking):', memErr.message);
+        }
+      }
+
+      const result = await routeMessage(enrichedMessages, process.env, {
         forceProvider: forceProvider || null,
         forceModel: forceModel || null
       });
@@ -251,6 +280,16 @@ http.createServer(async (req, res) => {
         console.error('[COST] Failed to log:', err.message)
       );
       invalidateCostCache(userId);
+
+      // Extract memories from conversation (async, non-blocking)
+      if (!forceProvider) {
+        memory.processConversationMemory(messages, {
+          user_id: userId, agent_id: 'senna_core',
+          source: 'conversation', source_type: 'message'
+        }, process.env).catch(err =>
+          console.error('[MEMORY] Extraction failed (non-blocking):', err.message)
+        );
+      }
 
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({
@@ -314,6 +353,184 @@ http.createServer(async (req, res) => {
     };
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify(providers));
+    return;
+  }
+
+  // ===== MEMORY ENGINE API =====
+
+  // POST /api/memory — add a memory
+  if (req.url === '/api/memory' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const parsed = JSON.parse(body);
+      const result = await memory.addMemory(parsed, process.env);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // GET /api/memory/search?user_id=X&q=Y&type=Z
+  if (req.url.startsWith('/api/memory/search') && req.method === 'GET') {
+    try {
+      const url = new URL(req.url, `http://localhost:${PORT}`);
+      const userId = url.searchParams.get('user_id') || 'marlon';
+      const query = url.searchParams.get('q') || '';
+      const memType = url.searchParams.get('type') || null;
+      const results = await memory.searchMemories(userId, query, process.env, {
+        memory_type: memType, limit: 50
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(results));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // PUT /api/memory/:id — update a memory
+  if (req.url.match(/^\/api\/memory\/[a-f0-9-]+$/) && req.method === 'PUT') {
+    try {
+      const memoryId = req.url.split('/').pop();
+      const body = await readBody(req);
+      const updates = JSON.parse(body);
+      const result = await memory.updateMemory(memoryId, updates, process.env);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // DELETE /api/memory/:id — archive a memory
+  if (req.url.match(/^\/api\/memory\/[a-f0-9-]+$/) && req.method === 'DELETE') {
+    try {
+      const memoryId = req.url.split('/').pop();
+      const result = await memory.deleteMemory(memoryId, process.env);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // GET /api/memory/:id/history — audit trail
+  if (req.url.match(/^\/api\/memory\/[a-f0-9-]+\/history$/) && req.method === 'GET') {
+    try {
+      const memoryId = req.url.split('/')[3];
+      const result = await memory.getMemoryHistory(memoryId, process.env);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // POST /api/memory/context — retrieve context for prompt injection
+  if (req.url === '/api/memory/context' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const parsed = JSON.parse(body);
+      const result = await memory.retrieveContext(
+        parsed.query, {
+          user_id: parsed.user_id || 'marlon',
+          agent_id: parsed.agent_id || 'senna_core',
+          session_id: parsed.session_id
+        }, process.env
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // POST /api/memory/extract — manually extract facts from messages
+  if (req.url === '/api/memory/extract' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const parsed = JSON.parse(body);
+      const result = await memory.processConversationMemory(
+        parsed.messages, {
+          user_id: parsed.user_id || 'marlon',
+          agent_id: parsed.agent_id || 'senna_core',
+          source: 'conversation', source_type: 'message'
+        }, process.env
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // POST /api/memory/ingest-event — ingest business event
+  if (req.url === '/api/memory/ingest-event' && req.method === 'POST') {
+    try {
+      const body = await readBody(req);
+      const event = JSON.parse(body);
+      const result = await memory.ingestBusinessEvent(event, process.env);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // GET /api/memory/health — memory system health
+  if (req.url === '/api/memory/health' && req.method === 'GET') {
+    try {
+      const result = await memory.getMemoryHealth(process.env);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // DELETE /api/memory/user/:userId/all — LGPD purge
+  if (req.url.match(/^\/api\/memory\/user\/[^/]+\/all$/) && req.method === 'DELETE') {
+    try {
+      const userId = req.url.split('/')[4];
+      const result = await memory.purgeUserMemories(userId, process.env);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // GET /api/memory/user/:userId/export — LGPD export
+  if (req.url.match(/^\/api\/memory\/user\/[^/]+\/export$/) && req.method === 'GET') {
+    try {
+      const userId = req.url.split('/')[4];
+      const result = await memory.exportUserMemories(userId, process.env);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
     return;
   }
 
