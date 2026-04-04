@@ -2854,11 +2854,22 @@ document.getElementById('boxMicBtn')?.addEventListener('click', handleOrbClick);
     if (window.VoiceEngine) window.VoiceEngine.deactivate();
   });
 
-  // Speed cycling
+  // Speed slider toggle
+  const speedWrap = document.getElementById('speedSliderWrap');
+  const speedSlider = document.getElementById('speedSlider');
+  const speedLabel = document.getElementById('speedSliderLabel');
+
   speedBtn?.addEventListener('click', () => {
-    speedIdx = (speedIdx + 1) % speeds.length;
-    const rate = speeds[speedIdx];
-    speedBtn.textContent = rate === 1 ? '1x' : rate + 'x';
+    speedWrap?.classList.toggle('hidden');
+    // Close volume slider if open
+    volumeWrap?.classList.add('hidden');
+  });
+
+  speedSlider?.addEventListener('input', (e) => {
+    const rate = parseInt(e.target.value) / 100;
+    const label = rate === 1 ? '1x' : rate.toFixed(2).replace(/0$/, '') + 'x';
+    speedBtn.textContent = label;
+    if (speedLabel) speedLabel.textContent = label;
     if (window.VoiceEngine) window.VoiceEngine.setPlaybackRate(rate);
   });
 
@@ -2866,6 +2877,8 @@ document.getElementById('boxMicBtn')?.addEventListener('click', handleOrbClick);
   let volTimeout;
   volumeBtn?.addEventListener('click', () => {
     volumeWrap?.classList.toggle('hidden');
+    // Close speed slider if open
+    speedWrap?.classList.add('hidden');
   });
   volumeBtn?.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -2887,13 +2900,19 @@ document.getElementById('boxMicBtn')?.addEventListener('click', handleOrbClick);
     volumeBtn?.querySelector('.icon-vol-off')?.classList.toggle('hidden', !muted);
   });
 
-  // Close volume slider when clicking outside
+  // Close sliders when clicking outside
   document.addEventListener('click', (e) => {
     if (!volumeWrap?.classList.contains('hidden') &&
         !volumeWrap?.contains(e.target) &&
         e.target !== volumeBtn &&
         !volumeBtn?.contains(e.target)) {
       volumeWrap?.classList.add('hidden');
+    }
+    if (!speedWrap?.classList.contains('hidden') &&
+        !speedWrap?.contains(e.target) &&
+        e.target !== speedBtn &&
+        !speedBtn?.contains(e.target)) {
+      speedWrap?.classList.add('hidden');
     }
   });
 })();

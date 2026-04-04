@@ -1957,8 +1957,9 @@ body.voice-active .perpetual-messages { display: none !important; }
   border-radius: 22px;
 }
 
-/* Volume wrapper — anchor for slider popup */
-.media-vol-wrap {
+/* Slider wrappers — anchor for popup */
+.media-vol-wrap,
+.media-speed-wrap {
   position: relative;
   display: flex;
   align-items: center;
@@ -1976,7 +1977,39 @@ body.voice-active .perpetual-messages { display: none !important; }
   padding: 14px 10px;
   backdrop-filter: blur(10px);
 }
-.volume-slider-wrap.hidden { display: none; }
+.volume-slider-wrap.hidden,
+.speed-slider-wrap.hidden { display: none; }
+
+/* Speed slider */
+.speed-slider-wrap {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 15, 15, 0.95);
+  border: 1px solid rgba(80, 200, 120, 0.15);
+  border-radius: 12px;
+  padding: 14px 10px 6px;
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.speed-slider {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 4px;
+  height: 90px;
+  accent-color: #50C878;
+  cursor: pointer;
+}
+.speed-slider-label {
+  font-family: 'Orbitron', monospace;
+  font-size: 10px;
+  color: #50C878;
+  letter-spacing: 0.5px;
+}
 .volume-slider {
   writing-mode: vertical-lr;
   direction: rtl;

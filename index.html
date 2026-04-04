@@ -406,7 +406,13 @@
             <svg class="icon-play hidden" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
           </button>
           <!-- Speed -->
-          <button class="media-btn media-btn-label" id="mediaSpeedBtn" title="Velocidade da voz">1x</button>
+          <div class="media-speed-wrap">
+            <button class="media-btn media-btn-label" id="mediaSpeedBtn" title="Velocidade da voz">1x</button>
+            <div class="speed-slider-wrap hidden" id="speedSliderWrap">
+              <input type="range" id="speedSlider" class="speed-slider" min="50" max="200" value="100" step="25" />
+              <div class="speed-slider-label" id="speedSliderLabel">1x</div>
+            </div>
+          </div>
           <!-- Mic (main action) -->
           <button class="media-btn media-btn-mic" id="boxMicBtn" title="Falar com SENNA">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
