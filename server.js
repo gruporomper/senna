@@ -577,6 +577,43 @@ http.createServer(async (req, res) => {
     return;
   }
 
+  // API: /api/stt/token → AssemblyAI temporary streaming token
+  if (req.url === '/api/stt/token' && req.method === 'POST') {
+    const apiKey = process.env.ASSEMBLYAI_API_KEY;
+    if (!apiKey) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'STT not configured', fallback: true }));
+      return;
+    }
+    try {
+      const tokenData = JSON.stringify({ expires_in: 3600 });
+      const tokenRes = await new Promise((resolve, reject) => {
+        const tokenReq = https.request({
+          hostname: 'api.assemblyai.com',
+          path: '/v2/realtime/token',
+          method: 'POST',
+          headers: {
+            'Authorization': apiKey,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(tokenData)
+          }
+        }, resolve);
+        tokenReq.on('error', reject);
+        tokenReq.write(tokenData);
+        tokenReq.end();
+      });
+      let body = '';
+      for await (const chunk of tokenRes) body += chunk;
+      const parsed = JSON.parse(body);
+      res.writeHead(tokenRes.statusCode, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ token: parsed.token, expires_at: Date.now() + 3600000 }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
   // API Proxy: /api/tts → Kokoro TTS (localhost:8880)
   if (req.url === '/api/tts' && req.method === 'POST') {
     try {

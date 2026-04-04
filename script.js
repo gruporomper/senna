@@ -1792,7 +1792,7 @@ async function callGrokAPI(userMessage, forceProvider = null, forceModel = null,
 }
 
 // ===== STREAMING LLM CALL =====
-async function callGrokAPIStream(userMessage, targetElement, forceProvider = null, forceModel = null, confirmed = false) {
+async function callGrokAPIStream(userMessage, targetElement, forceProvider = null, forceModel = null, confirmed = false, options = {}) {
   const history = appMode !== 'home' ? conversationHistory : perpetualHistory;
   if (!confirmed) {
     history.push({ role: 'user', content: userMessage });
@@ -1810,11 +1810,14 @@ async function callGrokAPIStream(userMessage, targetElement, forceProvider = nul
   if (forceModel) payload.forceModel = forceModel;
   if (confirmed) payload.confirmed = true;
 
-  const response = await fetch('/api/chat', {
+  const fetchOpts = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
-  });
+  };
+  if (options.signal) fetchOpts.signal = options.signal;
+
+  const response = await fetch('/api/chat', fetchOpts);
 
   // Handle 202: budget confirmation required
   if (response.status === 202) {
@@ -1822,7 +1825,7 @@ async function callGrokAPIStream(userMessage, targetElement, forceProvider = nul
     const senna = data._senna;
     const userConfirmed = await showBudgetConfirmModal(senna);
     if (userConfirmed) {
-      return callGrokAPIStream(userMessage, targetElement, forceProvider, forceModel, true);
+      return callGrokAPIStream(userMessage, targetElement, forceProvider, forceModel, true, options);
     } else {
       history.pop();
       throw new Error('__BUDGET_DECLINED__');
@@ -1859,6 +1862,8 @@ async function callGrokAPIStream(userMessage, targetElement, forceProvider = nul
           // Auto-scroll
           const scrollArea = appMode !== 'home' ? chatArea : document.querySelector('.perpetual-messages');
           if (scrollArea) scrollArea.scrollTop = scrollArea.scrollHeight;
+          // Notify token callback (used by VoiceEngine for sentence chunking)
+          if (options.onToken) options.onToken(data.token, fullContent);
         }
         if (data.done) {
           lastLLMResponse = data._senna || null;
@@ -2804,7 +2809,11 @@ sendRecBtn.addEventListener('click', sendRecording);
 document.getElementById('walkieToggleBtn').addEventListener('click', toggleWalkieTalkie);
 
 function handleOrbClick() {
-  handleOrbClickWalkie();
+  if (window.VoiceEngine && window.VoiceEngine.isAvailable()) {
+    window.VoiceEngine.handleOrbClick();
+  } else {
+    handleOrbClickWalkie();
+  }
 }
 
 orb.addEventListener('click', handleOrbClick);
@@ -3689,6 +3698,11 @@ function init() {
 
   // Initialize Supabase data layer (async, non-blocking)
   initSupabase();
+
+  // Initialize Voice Engine (async, non-blocking)
+  if (window.VoiceEngine) {
+    window.VoiceEngine.init().catch(err => console.warn('[VoiceEngine] Init failed:', err));
+  }
 }
 
 init();
