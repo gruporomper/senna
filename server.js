@@ -655,6 +655,19 @@ http.createServer(async (req, res) => {
 
   // Webhook: GitHub auto-deploy
   if (req.url === '/api/deploy' && req.method === 'POST') {
+    const deploySecret = process.env.DEPLOY_SECRET;
+    if (deploySecret) {
+      const body = await readBody(req);
+      const crypto = require('crypto');
+      const sig = req.headers['x-hub-signature-256'] || '';
+      const hmac = crypto.createHmac('sha256', deploySecret).update(body).digest('hex');
+      if (sig !== `sha256=${hmac}`) {
+        console.warn('[DEPLOY] Invalid signature');
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid signature' }));
+        return;
+      }
+    }
     console.log('[DEPLOY] Webhook received — pulling and restarting...');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'deploying' }));
