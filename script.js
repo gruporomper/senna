@@ -790,6 +790,10 @@ let audioContext = null;
 let analyser = null;
 let micStream = null;
 let waveformAnimId = null;
+let walkieTalkieMode = false;
+let vadSilenceTimer = null;
+const VAD_SILENCE_MS = 1800; // 1.8s of silence = auto-send
+const VAD_THRESHOLD = 0.04; // minimum amplitude to count as speech
 
 // ===== DOM =====
 const sidebar = document.getElementById('sidebar');
@@ -1991,7 +1995,7 @@ async function processCommand(text, fromVoice = false) {
 
       if (fromVoice) {
         setState('speaking');
-        speak(response, () => setState('idle'));
+        speak(response, () => { setState('idle'); if (walkieTalkieMode) walkieResumeListen(); });
       } else {
         setState('idle');
       }
@@ -2046,7 +2050,7 @@ async function processCommand(text, fromVoice = false) {
 
       if (fromVoice) {
         setState('speaking');
-        speak(response, () => setState('idle'));
+        speak(response, () => { setState('idle'); if (walkieTalkieMode) walkieResumeListen(); });
       } else {
         setState('idle');
       }
@@ -2421,6 +2425,22 @@ function drawWaveform() {
     // Audio-reactive helmet pulse
     pulseHelmetWithAudio(avg);
 
+    // VAD: silence detection for walkie-talkie mode
+    if (walkieTalkieMode && voiceTranscript.trim().length > 0) {
+      if (avg > VAD_THRESHOLD) {
+        // Speech detected — reset silence timer
+        if (vadSilenceTimer) { clearTimeout(vadSilenceTimer); vadSilenceTimer = null; }
+      } else if (!vadSilenceTimer) {
+        // Silence started — begin countdown
+        vadSilenceTimer = setTimeout(() => {
+          vadSilenceTimer = null;
+          if (walkieTalkieMode && isListening && voiceTranscript.trim().length > 0) {
+            walkieSend();
+          }
+        }, VAD_SILENCE_MS);
+      }
+    }
+
     // Push to history (scrolling waveform)
     waveformHistory.push(avg);
 
@@ -2484,6 +2504,100 @@ function stopWaveform() {
     audioContext.close();
     audioContext = null;
     analyser = null;
+  }
+}
+
+// ===== WALKIE-TALKIE MODE =====
+function toggleWalkieTalkie() {
+  walkieTalkieMode = !walkieTalkieMode;
+  const btn = document.getElementById('walkieToggleBtn');
+  if (btn) {
+    btn.classList.toggle('active', walkieTalkieMode);
+    btn.title = walkieTalkieMode ? 'Conversa continua: ON' : 'Conversa continua: OFF';
+  }
+  if (walkieTalkieMode) {
+    showToast('Conversa continua ativada');
+    // Hide cancel/send buttons — VAD handles everything
+    document.getElementById('cancelRecBtn').classList.add('walkie-hidden');
+    document.getElementById('sendRecBtn').classList.add('walkie-hidden');
+  } else {
+    showToast('Conversa continua desativada');
+    document.getElementById('cancelRecBtn').classList.remove('walkie-hidden');
+    document.getElementById('sendRecBtn').classList.remove('walkie-hidden');
+    if (vadSilenceTimer) { clearTimeout(vadSilenceTimer); vadSilenceTimer = null; }
+  }
+}
+
+function walkieSend() {
+  const text = voiceTranscript.trim();
+  removeLiveTranscript();
+
+  if (!text) return;
+
+  // Stop listening temporarily
+  isListening = false;
+  try { recognition.stop(); } catch(e) {}
+  stopWaveform();
+
+  // Hide recording row, show input
+  document.getElementById('inputWrapper').classList.remove('hidden');
+  recordingRow.classList.add('hidden');
+
+  voiceTranscript = '';
+  setState('thinking');
+
+  // Process and auto-speak — use fromVoice=true so TTS triggers
+  processCommand(text, true).then(() => {
+    // After TTS finishes (or if no TTS), auto-resume listening
+    if (walkieTalkieMode && currentState === 'idle') {
+      walkieResumeListen();
+    }
+  }).catch(() => {
+    if (walkieTalkieMode) walkieResumeListen();
+  });
+}
+
+function walkieResumeListen() {
+  if (!walkieTalkieMode || !isRecognitionSupported) return;
+  // Small delay to avoid picking up end of TTS audio
+  setTimeout(() => {
+    if (walkieTalkieMode && currentState === 'idle') {
+      startRecording();
+    }
+  }, 600);
+}
+
+// Barge-in: override handleOrbClick for walkie-talkie
+function handleOrbClickWalkie() {
+  if (currentState === 'speaking') {
+    // Barge-in: stop TTS immediately and start listening
+    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+    stopSpeakingAnimation();
+    synthesis.cancel();
+    setState('idle');
+    if (walkieTalkieMode) {
+      walkieResumeListen();
+    }
+  } else if (currentState === 'idle') {
+    startRecording();
+  } else if (currentState === 'listening') {
+    if (walkieTalkieMode) {
+      // In walkie-talkie mode, clicking orb during listening = force send
+      if (voiceTranscript.trim()) {
+        if (vadSilenceTimer) { clearTimeout(vadSilenceTimer); vadSilenceTimer = null; }
+        walkieSend();
+      } else {
+        // No transcript yet — cancel and exit walkie mode
+        walkieTalkieMode = false;
+        const btn = document.getElementById('walkieToggleBtn');
+        if (btn) btn.classList.remove('active');
+        document.getElementById('cancelRecBtn').classList.remove('walkie-hidden');
+        document.getElementById('sendRecBtn').classList.remove('walkie-hidden');
+        cancelRecording();
+      }
+    } else {
+      sendRecording();
+    }
   }
 }
 
@@ -2676,20 +2790,21 @@ micBtn.addEventListener('click', (e) => {
   startRecording();
 });
 
-cancelRecBtn.addEventListener('click', cancelRecording);
+cancelRecBtn.addEventListener('click', () => {
+  if (walkieTalkieMode) {
+    walkieTalkieMode = false;
+    const btn = document.getElementById('walkieToggleBtn');
+    if (btn) btn.classList.remove('active');
+    document.getElementById('cancelRecBtn').classList.remove('walkie-hidden');
+    document.getElementById('sendRecBtn').classList.remove('walkie-hidden');
+  }
+  cancelRecording();
+});
 sendRecBtn.addEventListener('click', sendRecording);
+document.getElementById('walkieToggleBtn').addEventListener('click', toggleWalkieTalkie);
 
 function handleOrbClick() {
-  if (currentState === 'idle') {
-    startRecording();
-  } else if (currentState === 'listening') {
-    sendRecording();
-  } else if (currentState === 'speaking') {
-    if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-    stopSpeakingAnimation();
-    synthesis.cancel();
-    setState('idle');
-  }
+  handleOrbClickWalkie();
 }
 
 orb.addEventListener('click', handleOrbClick);

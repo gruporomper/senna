@@ -2695,6 +2695,27 @@ body.state-listening .input-row {
   background: rgba(0, 155, 58, 0.35);
 }
 
+.btn-walkie {
+  background: rgba(255, 215, 0, 0.08);
+  color: rgba(255, 215, 0, 0.5);
+  order: -1;
+}
+.btn-walkie:hover {
+  background: rgba(255, 215, 0, 0.15);
+  color: var(--yellow);
+}
+.btn-walkie.active {
+  background: rgba(255, 215, 0, 0.2);
+  color: var(--yellow);
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
+  animation: walkie-pulse 2s ease-in-out infinite;
+}
+@keyframes walkie-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 215, 0, 0.3); }
+  50% { box-shadow: 0 0 14px rgba(255, 215, 0, 0.5); }
+}
+.walkie-hidden { display: none !important; }
+
 /* ===== CHECKERED FLAG ===== */
 .checkered {
   height: 4px;
