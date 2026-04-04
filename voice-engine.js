@@ -126,8 +126,12 @@
 
     // ===== LIFECYCLE =====
 
+    // --- Web Speech API fallback ---
+    webSpeechRecognition: null,
+    useWebSpeechSTT: false, // true when AssemblyAI is not available
+
     isAvailable() {
-      return this.available && !this.legacyMode;
+      return this.available;
     },
 
     async init() {
@@ -135,8 +139,8 @@
 
       // Check for basic requirements
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.warn('[VoiceEngine] getUserMedia not available, falling back to legacy');
-        this.legacyMode = true;
+        console.warn('[VoiceEngine] getUserMedia not available');
+        this.available = false;
         return;
       }
 
@@ -145,19 +149,26 @@
         const tokenResp = await fetch(CONFIG.sttTokenEndpoint, { method: 'POST' });
         const tokenData = await tokenResp.json();
         if (tokenData.error || tokenData.fallback) {
-          console.warn('[VoiceEngine] AssemblyAI not configured:', tokenData.error);
-          this.legacyMode = true;
+          console.log('[VoiceEngine] AssemblyAI not configured, using Web Speech API');
+          this.useWebSpeechSTT = true;
+        }
+      } catch (err) {
+        console.log('[VoiceEngine] STT token check failed, using Web Speech API');
+        this.useWebSpeechSTT = true;
+      }
+
+      // Check Web Speech API availability as fallback
+      if (this.useWebSpeechSTT) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          console.warn('[VoiceEngine] No STT available (no AssemblyAI, no Web Speech API)');
+          this.available = false;
           return;
         }
-        // Don't store token yet — will fetch fresh one on activate()
-      } catch (err) {
-        console.warn('[VoiceEngine] STT token check failed:', err.message);
-        this.legacyMode = true;
-        return;
       }
 
       this.available = true;
-      console.log('[VoiceEngine] Available. AssemblyAI configured.');
+      console.log(`[VoiceEngine] Available. STT: ${this.useWebSpeechSTT ? 'Web Speech API' : 'AssemblyAI'}`);
     },
 
     async activate() {
@@ -169,28 +180,31 @@
       this.metrics.totalSessions++;
 
       try {
-        // 1. Get mic stream
-        this.micStream = await navigator.mediaDevices.getUserMedia(CONFIG.micConstraints);
+        if (this.useWebSpeechSTT) {
+          // Web Speech API mode — no AudioWorklet or AssemblyAI needed
+          this._initWebSpeechRecognition();
+          this.webSpeechRecognition.start();
+        } else {
+          // AssemblyAI mode — full pipeline
+          this.micStream = await navigator.mediaDevices.getUserMedia(CONFIG.micConstraints);
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: CONFIG.sttSampleRate
+          });
+          await this.setupAudioPipeline();
+          await this.initVAD();
+          await this.fetchSTTToken();
+          await this.openSTTSocket();
+        }
 
-        // 2. Create AudioContext
-        this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-          sampleRate: CONFIG.sttSampleRate
-        });
+        // Create TTS AudioContext if needed
+        if (!this.ttsAudioContext || this.ttsAudioContext.state === 'closed') {
+          this.ttsAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+          this.ttsSpeakAnalyser = this.ttsAudioContext.createAnalyser();
+          this.ttsSpeakAnalyser.fftSize = 256;
+          this.ttsSpeakAnalyser.connect(this.ttsAudioContext.destination);
+        }
 
-        // 3. Setup audio pipeline (AudioWorklet + STT feed)
-        await this.setupAudioPipeline();
-
-        // 4. Init VAD (if available)
-        await this.initVAD();
-
-        // 5. Get STT token and open WebSocket
-        await this.fetchSTTToken();
-        await this.openSTTSocket();
-
-        // 6. Transition to LISTENING
         this.transition('LISTENING');
-
-        // Show recording UI
         this._showRecordingUI();
 
       } catch (err) {
@@ -215,6 +229,9 @@
     cleanup() {
       // Abort any in-flight LLM request
       if (this.llmAbort) { this.llmAbort.abort(); this.llmAbort = null; }
+
+      // Stop Web Speech Recognition
+      this._stopWebSpeechRecognition();
 
       // Close STT socket
       this.closeSTTSocket();
@@ -635,10 +652,15 @@
           }
         }
 
-        // If no TTS chunks were enqueued (very short response), transition directly
+        // If no TTS chunks were enqueued (very short response), continue conversation
         if (this.ttsQueue.length === 0 && this.state === 'THINKING') {
-          this.transition(window.walkieTalkieMode ? 'LISTENING' : 'IDLE');
-          if (!window.walkieTalkieMode) this._hideRecordingUI();
+          this.transition('LISTENING');
+          // Restart Web Speech if needed
+          if (this.useWebSpeechSTT && this.webSpeechRecognition) {
+            setTimeout(() => {
+              try { this.webSpeechRecognition.start(); } catch(e) {}
+            }, 150);
+          }
         }
 
       } catch (err) {
@@ -796,15 +818,23 @@
       }
 
       if (this.ttsQueue.length === 0) {
-        // All chunks played
+        // All chunks played — continue conversation
         if (this.state === 'SPEAKING') {
           if (typeof stopSpeakingAnimation === 'function') stopSpeakingAnimation();
           if (typeof resetHelmetPulse === 'function') resetHelmetPulse();
 
-          if (window.walkieTalkieMode) {
-            this.transition('LISTENING');
-          } else {
-            this.deactivate();
+          // Always continue listening (conversational mode)
+          this.transition('LISTENING');
+
+          // Clear cockpit transcript for next turn
+          const ct = document.getElementById('cockpitTranscript');
+          if (ct) ct.textContent = '';
+
+          // Restart Web Speech Recognition
+          if (this.useWebSpeechSTT && this.webSpeechRecognition) {
+            setTimeout(() => {
+              try { this.webSpeechRecognition.start(); } catch(e) {}
+            }, 300);
           }
         }
         return;
@@ -931,6 +961,96 @@
       console.log('[VoiceEngine] VAD: speech_end');
     },
 
+    // ===== WEB SPEECH API FALLBACK STT =====
+
+    _initWebSpeechRecognition() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) return;
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'pt-BR';
+      recognition.interimResults = true;
+      recognition.continuous = true;
+      recognition.maxAlternatives = 1;
+
+      recognition.onresult = (event) => {
+        let interim = '';
+        let final = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            final += transcript;
+          } else {
+            interim += transcript;
+          }
+        }
+
+        // Handle barge-in: if we get speech during SPEAKING/THINKING
+        if (this.state === 'SPEAKING' || this.state === 'THINKING') {
+          if (interim.length > 3 || final.length > 0) {
+            this.bargeIn();
+            // Restart recognition after barge-in
+            try { recognition.stop(); } catch(e) {}
+            setTimeout(() => {
+              if (this.state === 'LISTENING') {
+                try { recognition.start(); } catch(e) {}
+              }
+            }, 100);
+            return;
+          }
+        }
+
+        if (final) {
+          this.sttTranscript += (this.sttTranscript ? ' ' : '') + final.trim();
+          this.sttPartial = '';
+          if (typeof updateLiveTranscript === 'function') {
+            updateLiveTranscript(this.sttTranscript);
+          }
+          // Start turn commit timer
+          if (this.state === 'LISTENING') {
+            this._resetTurnCommitTimer();
+          }
+        } else if (interim) {
+          this.sttPartial = interim;
+          const displayText = (this.sttTranscript + ' ' + interim).trim();
+          if (typeof updateLiveTranscript === 'function') {
+            updateLiveTranscript(displayText);
+          }
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.warn('[VoiceEngine] Web Speech error:', event.error);
+        if (event.error === 'no-speech' || event.error === 'aborted') {
+          // Auto-restart on no-speech
+          if (this.state === 'LISTENING') {
+            setTimeout(() => {
+              try { recognition.start(); } catch(e) {}
+            }, 100);
+          }
+        }
+      };
+
+      recognition.onend = () => {
+        // Auto-restart if still in listening state
+        if (this.state === 'LISTENING') {
+          setTimeout(() => {
+            try { recognition.start(); } catch(e) {}
+          }, 100);
+        }
+      };
+
+      this.webSpeechRecognition = recognition;
+      console.log('[VoiceEngine] Web Speech Recognition initialized');
+    },
+
+    _stopWebSpeechRecognition() {
+      if (this.webSpeechRecognition) {
+        try { this.webSpeechRecognition.stop(); } catch(e) {}
+      }
+    },
+
     // ===== BARGE-IN =====
 
     bargeIn() {
@@ -956,8 +1076,19 @@
       this.sttTranscript = '';
       this.sttPartial = '';
 
-      // 5. Transition back to LISTENING
+      // 5. Clear cockpit transcript
+      const ct = document.getElementById('cockpitTranscript');
+      if (ct) ct.textContent = '';
+
+      // 6. Transition back to LISTENING
       this.transition('LISTENING');
+
+      // 7. Restart Web Speech Recognition if in fallback mode
+      if (this.useWebSpeechSTT && this.webSpeechRecognition) {
+        setTimeout(() => {
+          try { this.webSpeechRecognition.start(); } catch(e) {}
+        }, 150);
+      }
     },
 
     // ===== UI HELPERS =====
