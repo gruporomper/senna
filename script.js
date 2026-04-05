@@ -649,6 +649,7 @@ const ACTION_HANDLERS = {
   open_discoveries: () => openDiscoveriesPanel(),
   open_profile: () => setAppMode('self-profile'),
   open_rapport: () => openRapportModal(),
+  open_skills: () => openSkillsModal(),
 };
 
 function executeActions(text) {
@@ -853,6 +854,265 @@ const SennaMetrics = {
     if (event === 'task_saved') metrics[today].tasksSaved++;
     if (event === 'message') metrics[today].messages++;
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(metrics));
+  }
+};
+
+// ===== SKILLS ENGINE =====
+const SkillsEngine = {
+  STORAGE_KEY: 'senna_skills_custom',
+  activeSkill: null, // currently active skill for this message
+
+  // Built-in skills registry
+  BUILT_IN: [
+    {
+      id: 'email_pro',
+      name: 'E-mail Profissional',
+      icon: '✉️',
+      description: 'Redige e-mails profissionais com tom adequado ao contexto',
+      triggers: [/\b(escreve?|redige?|faz|cria|monta)\b.*\b(e-?mail|email)\b/i, /\be-?mail\b.*\b(profissional|formal|comercial)\b/i],
+      prompt: `SKILL ATIVA: E-MAIL PROFISSIONAL
+Voce esta no modo de redacao de e-mail. Siga estas regras:
+- Pergunte: destinatario, assunto, tom (formal/casual/assertivo), pontos principais
+- Se o usuario ja deu contexto suficiente, redija direto
+- Estruture com: saudacao, corpo, despedida, assinatura
+- Entregue o e-mail PRONTO PARA COPIAR entre blocos de texto
+- Ofereca variacao de tom se necessario
+- Ao final pergunte: "Quer ajustar algo ou posso considerar pronto?"`,
+      autoActivate: true
+    },
+    {
+      id: 'social_post',
+      name: 'Post para Redes',
+      icon: '📱',
+      description: 'Cria posts otimizados para Instagram, LinkedIn, Twitter/X',
+      triggers: [/\b(cria|faz|escreve?|monta)\b.*\b(post|legenda|carrossel|stories|reels)\b/i, /\b(instagram|linkedin|twitter|tiktok)\b.*\b(post|conteudo)\b/i],
+      prompt: `SKILL ATIVA: POST PARA REDES SOCIAIS
+Voce esta no modo de criacao de conteudo para redes sociais.
+- Identifique a rede (Instagram, LinkedIn, Twitter/X, TikTok)
+- Adapte formato, tom e tamanho ao padrao da rede
+- Inclua hashtags relevantes (5-15 para Instagram, 3-5 para LinkedIn)
+- Se Instagram: foque em legenda envolvente com CTA
+- Se LinkedIn: tom mais profissional, storytelling
+- Se Twitter/X: conciso, impactante, max 280 chars
+- Ofereca variacoes de abordagem
+- Entregue PRONTO PARA COPIAR`,
+      autoActivate: true
+    },
+    {
+      id: 'code_review',
+      name: 'Revisao de Codigo',
+      icon: '🔍',
+      description: 'Analisa codigo com foco em bugs, performance e boas praticas',
+      triggers: [/\b(revisa|analisa|review)\b.*\b(codigo|code|script|funcao)\b/i, /\b(bug|erro|fix|debug)\b.*\b(codigo|code)\b/i, /```[\s\S]{50,}/],
+      prompt: `SKILL ATIVA: REVISAO DE CODIGO
+Voce esta no modo de code review profissional.
+- Analise o codigo com olhar critico mas construtivo
+- Verifique: bugs, vulnerabilidades, performance, legibilidade, boas praticas
+- Para cada issue encontrada, classifique: CRITICO / ALERTA / SUGESTAO
+- Sugira correcoes concretas com codigo
+- Destaque o que esta BEM feito tambem
+- Se nao houver codigo, pergunte qual codigo revisar`,
+      autoActivate: true
+    },
+    {
+      id: 'translator',
+      name: 'Tradutor Pro',
+      icon: '🌐',
+      description: 'Traduz textos mantendo tom, nuances e contexto cultural',
+      triggers: [/\b(traduz|translate|traduca|traduzir)\b/i, /\b(ingles|english|espanhol|spanish|frances|french)\b.*\b(para|to|em)\b/i],
+      prompt: `SKILL ATIVA: TRADUTOR PROFISSIONAL
+Voce esta no modo de traducao profissional.
+- Identifique idioma de origem e destino
+- Mantenha tom, nuances e expressoes idiomaticas
+- Adapte culturalmente quando necessario
+- Para termos tecnicos, mantenha o original entre parenteses
+- Ofereca alternativas quando houver ambiguidade
+- Entregue a traducao limpa, pronta para uso
+- Se nao souber o idioma destino, pergunte`,
+      autoActivate: true
+    },
+    {
+      id: 'meeting_prep',
+      name: 'Preparo de Reuniao',
+      icon: '📋',
+      description: 'Prepara pauta, pontos de discussao e follow-ups para reunioes',
+      triggers: [/\b(reuniao|meeting|call)\b.*\b(prepara|organiza|pauta|agenda)\b/i, /\b(prepara|organiza)\b.*\b(reuniao|meeting)\b/i],
+      prompt: `SKILL ATIVA: PREPARO DE REUNIAO
+Voce esta no modo de preparacao de reunioes.
+- Pergunte: tema, participantes, objetivo, duracao
+- Monte: pauta estruturada com tempos, pontos de discussao, decisoes necessarias
+- Sugira: perguntas estrategicas para cada ponto
+- Prepare: template de ata com campos para preencher durante a reuniao
+- Ao final, ofereca: "Quer que eu crie uma tarefa no Cockpit para follow-up?"`,
+      autoActivate: true
+    },
+    {
+      id: 'pitch_builder',
+      name: 'Construtor de Pitch',
+      icon: '🎯',
+      description: 'Monta pitches de venda, apresentacao ou investimento',
+      triggers: [/\b(pitch|apresentacao|proposta)\b.*\b(venda|investidor|cliente|comercial)\b/i, /\b(monta|cria|faz)\b.*\b(pitch|proposta|apresentacao)\b/i],
+      prompt: `SKILL ATIVA: CONSTRUTOR DE PITCH
+Voce esta no modo de construcao de pitch.
+- Identifique: tipo (venda, investimento, parceria), audiencia, produto/servico
+- Estruture seguindo framework: Problema > Solucao > Diferencial > Prova Social > CTA
+- Para investidores: inclua TAM/SAM/SOM, modelo de receita, traction
+- Para vendas: foque em dor do cliente, beneficios, ROI
+- Entregue roteiro estruturado com falas sugeridas
+- Sugira objecoes previsiveis e respostas`,
+      autoActivate: true
+    },
+    {
+      id: 'contract_review',
+      name: 'Analise de Contrato',
+      icon: '📄',
+      description: 'Analisa contratos identificando riscos, clausulas criticas e sugestoes',
+      triggers: [/\b(contrato|contratual|clausula)\b.*\b(analisa|revisa|verifica)\b/i, /\b(analisa|revisa)\b.*\b(contrato|acordo|termo)\b/i],
+      prompt: `SKILL ATIVA: ANALISE DE CONTRATO
+Voce esta no modo de analise contratual.
+- Leia o contrato/clausula com atencao
+- Identifique: riscos, clausulas abusivas, pontos de atencao, obrigacoes criticas
+- Classifique cada ponto: RISCO ALTO / ATENCAO / OK
+- Sugira alteracoes concretas para proteger o usuario
+- Destaque prazos, multas, rescisao e renovacao automatica
+- AVISO: nao substitui advogado — recomende consulta juridica para decisoes finais`,
+      autoActivate: true
+    },
+    {
+      id: 'brainstorm',
+      name: 'Brainstorm Criativo',
+      icon: '💡',
+      description: 'Gera ideias criativas usando tecnicas de brainstorming estruturado',
+      triggers: [/\b(brainstorm|ideias|criativ)\b/i, /\b(me da|gera|sugira|pensa)\b.*\b(ideias?|sugestoes|opcoes)\b/i],
+      prompt: `SKILL ATIVA: BRAINSTORM CRIATIVO
+Voce esta no modo de brainstorming estruturado.
+- Use tecnicas: SCAMPER, mapa mental, analogias, inversao
+- Gere pelo menos 10 ideias, de conservadoras a ousadas
+- Organize por categoria: Seguro / Inovador / Maluco-mas-genial
+- Para cada ideia, de 1 frase de como executar
+- Nao julgue nenhuma ideia — brainstorm e sobre quantidade primeiro
+- Ao final, pergunte quais interessam para aprofundar`,
+      autoActivate: true
+    },
+    {
+      id: 'data_analyst',
+      name: 'Analista de Dados',
+      icon: '📊',
+      description: 'Analisa dados, gera insights e recomendacoes baseadas em numeros',
+      triggers: [/\b(analisa|interpreta)\b.*\b(dados|numeros|metricas|resultados)\b/i, /\b(dashboard|relatorio|kpi|roi|conversao|faturamento)\b/i],
+      prompt: `SKILL ATIVA: ANALISTA DE DADOS
+Voce esta no modo de analise de dados.
+- Identifique os dados apresentados e o contexto
+- Calcule: tendencias, variacoes, medias, comparativos
+- Destaque: insights nao obvios, anomalias, padroes
+- Sugira: acoes concretas baseadas nos dados
+- Use formato: Dado > Insight > Acao recomendada
+- Se possivel, projete cenarios (otimista/realista/pessimista)
+- Pergunte se quer visualizacao em tabela ou lista`,
+      autoActivate: true
+    },
+    {
+      id: 'copywriter',
+      name: 'Copywriting',
+      icon: '✍️',
+      description: 'Escreve textos persuasivos para vendas, landing pages e anuncios',
+      triggers: [/\b(copy|copywriting|texto de venda|landing page|anuncio)\b/i, /\b(persuasivo|converte|conversao)\b.*\b(texto|copy)\b/i],
+      prompt: `SKILL ATIVA: COPYWRITING
+Voce esta no modo de copywriting profissional.
+- Identifique: produto/servico, audiencia, canal, objetivo
+- Use frameworks: AIDA, PAS, BAB conforme o contexto
+- Foque em: headline matadora, sub-headline, body copy, CTA irresistivel
+- Para anuncios: curto, direto, com hook nos primeiros 3 segundos
+- Para landing pages: estruture secoes com social proof
+- Entregue variantes (A/B) quando possivel
+- Tom adaptado ao publico alvo`,
+      autoActivate: true
+    }
+  ],
+
+  // Get custom skills from localStorage
+  getCustom() {
+    try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || []; }
+    catch { return []; }
+  },
+  saveCustom(skills) {
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(skills));
+  },
+  addCustom(skill) {
+    const skills = this.getCustom();
+    skill.id = skill.id || 'skill_' + Date.now();
+    skill.custom = true;
+    // Store trigger strings (not RegExp) for JSON serialization
+    skill.triggerStrings = skill.triggerStrings || [];
+    skill.triggers = []; // rebuilt at detect() time from triggerStrings
+    skill.autoActivate = skill.triggerStrings.length > 0;
+    skills.push(skill);
+    this.saveCustom(skills);
+    return skill;
+  },
+  deleteCustom(id) {
+    this.saveCustom(this.getCustom().filter(s => s.id !== id));
+  },
+
+  // Get all skills (built-in + custom)
+  getAll() {
+    return [...this.BUILT_IN, ...this.getCustom()];
+  },
+
+  // Detect skill from user message (auto-activation)
+  detect(userMessage) {
+    const all = this.getAll().filter(s => s.autoActivate);
+    for (const skill of all) {
+      // Check built-in triggers (RegExp or string)
+      if (skill.triggers && skill.triggers.length > 0) {
+        for (const trigger of skill.triggers) {
+          if (trigger instanceof RegExp) {
+            if (trigger.test(userMessage)) return skill;
+          } else if (typeof trigger === 'string') {
+            if (userMessage.toLowerCase().includes(trigger.toLowerCase())) return skill;
+          }
+        }
+      }
+      // Check custom skill triggerStrings (stored as plain strings for serialization)
+      if (skill.triggerStrings && skill.triggerStrings.length > 0) {
+        for (const ts of skill.triggerStrings) {
+          if (userMessage.toLowerCase().includes(ts.toLowerCase())) return skill;
+        }
+      }
+    }
+    return null;
+  },
+
+  // Find skill by name (manual activation: "usa skill X", "/skill X")
+  findByName(name) {
+    const lower = name.toLowerCase().trim();
+    return this.getAll().find(s =>
+      s.id === lower ||
+      s.name.toLowerCase() === lower ||
+      s.name.toLowerCase().includes(lower)
+    );
+  },
+
+  // Activate a skill — returns the prompt injection
+  activate(skill) {
+    this.activeSkill = skill;
+    console.log(`[Skills] Activated: ${skill.name}`);
+    return skill.prompt;
+  },
+
+  deactivate() {
+    this.activeSkill = null;
+  },
+
+  // Build skills list for system prompt (so LLM knows what's available)
+  buildPromptBlock() {
+    const all = this.getAll();
+    let block = `\nSKILLS DISPONIVEIS:\nVoce tem ${all.length} skills especializadas. Elas se autoativam quando detectam contexto relevante.\n`;
+    block += `O usuario tambem pode pedir: "usa skill [nome]" ou "/skill [nome]"\n`;
+    block += `Quando uma skill estiver ativa, siga o prompt dela fielmente.\n`;
+    block += `Skills: ${all.map(s => `${s.icon} ${s.name}`).join(' | ')}\n`;
+    block += `Se o usuario perguntar sobre skills, liste as disponiveis com icone e descricao.\n`;
+    return block;
   }
 };
 
@@ -1149,6 +1409,14 @@ Ações disponíveis:
 - [ACTION:open_rapport] — Abre configuracao de estilo/rapport
 - [ACTION:open_radar] — Abre configuracao do Radar
 - [ACTION:open_discoveries] — Abre o painel de Descobertas
+- [ACTION:open_skills] — Abre o painel de Skills
+
+SKILLS:
+Voce tem skills especializadas que se autoativam quando detectam contexto relevante na mensagem do usuario.
+O usuario tambem pode ativar manualmente: "usa skill [nome]", "ativa skill [nome]", ou "/skill [nome]".
+Quando uma skill estiver ativa, siga o prompt dela fielmente e informe ao usuario qual skill esta ativa.
+O usuario pode ver todas as skills com "/skills" ou pedindo "mostra as skills".
+
 REGRAS:
 - Use APENAS quando o usuário pedir explicitamente ("abre", "mostra", "cria", "vai para", "verifica")
 - Coloque a tag no FINAL da resposta, depois do texto
@@ -1902,6 +2170,15 @@ function buildSystemPrompt() {
   // User profile summary
   const profileSummary = SelfProfileManager.getSummary();
   if (profileSummary) ctx += '\n\n## PERFIL DO USUARIO\n' + profileSummary;
+
+  // Skills block
+  const skillsBlock = SkillsEngine.buildPromptBlock();
+  if (skillsBlock) ctx += '\n\n' + skillsBlock;
+
+  // Active skill prompt injection
+  if (SkillsEngine.activeSkill) {
+    ctx += '\n\n' + SkillsEngine.activeSkill.prompt;
+  }
 
   return SYSTEM_PROMPT + ctx;
 }
@@ -2739,6 +3016,9 @@ profileMenu.addEventListener('click', (e) => {
   switch (action) {
     case 'personalizar':
       openRapportModal();
+      break;
+    case 'skills':
+      openSkillsModal();
       break;
     case 'perfil':
       setAppMode('self-profile');
@@ -3624,12 +3904,45 @@ async function processCommand(text, fromVoice = false) {
   if (trimmed === '/descobertas') { openDiscoveriesPanel(); return; }
   if (trimmed === '/perfil') { setAppMode('self-profile'); return; }
   if (trimmed === '/rapport' || trimmed === '/estilo') { openRapportModal(); return; }
+  if (trimmed === '/skills') { openSkillsModal(); return; }
+  if (trimmed.startsWith('/skill ')) {
+    const skillName = text.trim().slice(7).trim();
+    const skill = SkillsEngine.findByName(skillName);
+    if (skill) {
+      SkillsEngine.activate(skill);
+      showSkillBadge(skill);
+      const msg = `${skill.icon} Skill **${skill.name}** ativada! ${skill.description}`;
+      if (appMode !== 'home') { addMessage(msg, 'assistant'); } else { addPerpetualMessage(msg, 'assistant'); }
+    } else {
+      const msg = `Skill "${skillName}" não encontrada. Use /skills para ver as disponíveis.`;
+      if (appMode !== 'home') { addMessage(msg, 'assistant'); } else { addPerpetualMessage(msg, 'assistant'); }
+    }
+    return;
+  }
 
   // Parse model prefix (/grok, /gemini, /gpt, /claude, /ollama, /turbo)
   const prefix = parseModelPrefix(text);
   const actualText = prefix.text;
   const forceProvider = prefix.provider;
   const forceModel = prefix.model;
+
+  // === SKILLS AUTO-DETECTION ===
+  // Check for manual "usa skill X" / "ativa skill X"
+  const skillActivationMatch = actualText.match(/\b(?:usa|ativa|usar|ativar|ative|use)\s+(?:a\s+)?skill\s+(.+)/i);
+  if (skillActivationMatch) {
+    const skill = SkillsEngine.findByName(skillActivationMatch[1].trim());
+    if (skill) { SkillsEngine.activate(skill); showSkillBadge(skill); }
+  }
+  // Auto-detect skill from message context (only if no skill manually activated)
+  if (!SkillsEngine.activeSkill) {
+    const detectedSkill = SkillsEngine.detect(actualText);
+    if (detectedSkill) { SkillsEngine.activate(detectedSkill); showSkillBadge(detectedSkill); }
+  }
+  // Rebuild system prompt with active skill
+  if (SkillsEngine.activeSkill) {
+    conversationHistory[0] = { role: 'system', content: buildSystemPrompt() };
+    perpetualHistory[0] = { role: 'system', content: buildSystemPrompt() };
+  }
 
   if (appMode !== 'home') {
     // === SESSION MODE ===
@@ -5694,6 +6007,168 @@ function openRapportModal() {
   });
 
   document.body.appendChild(modal);
+}
+
+// ===== SKILLS MODAL =====
+function openSkillsModal() {
+  document.querySelectorAll('.skills-modal').forEach(m => m.remove());
+  const allSkills = SkillsEngine.getAll();
+  const customSkills = SkillsEngine.getCustom();
+  const builtIn = SkillsEngine.BUILT_IN;
+
+  const modal = document.createElement('div');
+  modal.className = 'skills-modal';
+
+  function renderSkillCards(skills, isCustom = false) {
+    return skills.map(s => {
+      const isActive = SkillsEngine.activeSkill && SkillsEngine.activeSkill.id === s.id;
+      return `<div class="skill-card ${isActive ? 'active' : ''}" data-skill-id="${s.id}">
+        <div class="skill-card-header">
+          <span class="skill-card-icon">${s.icon}</span>
+          <span class="skill-card-name">${s.name}</span>
+          ${isCustom ? `<button class="skill-delete-btn" data-delete-id="${s.id}" title="Excluir">&times;</button>` : ''}
+        </div>
+        <p class="skill-card-desc">${s.description}</p>
+        <div class="skill-card-actions">
+          <button class="skill-activate-btn" data-activate-id="${s.id}">${isActive ? 'Desativar' : 'Ativar'}</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  modal.innerHTML = `<div class="skills-modal-content">
+    <div class="skills-header">
+      <h3>Skills</h3>
+      <button class="skills-close">&times;</button>
+    </div>
+    <p class="skills-subtitle">Skills se autoativam por contexto ou podem ser ativadas manualmente com <code>/skill nome</code></p>
+
+    <div class="skills-section">
+      <h4>Skills Nativas (${builtIn.length})</h4>
+      <div class="skills-grid" id="skillsBuiltInGrid">
+        ${renderSkillCards(builtIn)}
+      </div>
+    </div>
+
+    <div class="skills-section">
+      <h4>Skills Personalizadas (${customSkills.length})</h4>
+      <div class="skills-grid" id="skillsCustomGrid">
+        ${customSkills.length ? renderSkillCards(customSkills, true) : '<p class="skills-empty">Nenhuma skill personalizada criada.</p>'}
+      </div>
+      <button class="skills-create-btn" id="skillsCreateBtn">+ Criar Skill</button>
+    </div>
+
+    <div class="skills-create-form hidden" id="skillsCreateForm">
+      <h4>Nova Skill</h4>
+      <div class="skills-form-field"><label>Nome</label><input type="text" id="skillFormName" placeholder="Ex: Analista Financeiro"></div>
+      <div class="skills-form-field"><label>Icone (emoji)</label><input type="text" id="skillFormIcon" placeholder="Ex: 💰" maxlength="4"></div>
+      <div class="skills-form-field"><label>Descricao</label><input type="text" id="skillFormDesc" placeholder="Descreva o que a skill faz"></div>
+      <div class="skills-form-field"><label>Prompt (instrucoes para o SENNA)</label><textarea id="skillFormPrompt" rows="4" placeholder="SKILL ATIVA: NOME\\nVoce agora deve..."></textarea></div>
+      <div class="skills-form-field"><label>Gatilhos (palavras-chave, separadas por virgula — opcional)</label><input type="text" id="skillFormTriggers" placeholder="Ex: analise financeira, balanco, investimento"></div>
+      <div class="skills-form-actions">
+        <button class="skills-form-cancel" id="skillFormCancel">Cancelar</button>
+        <button class="skills-form-save" id="skillFormSave">Salvar Skill</button>
+      </div>
+    </div>
+  </div>`;
+
+  // Close
+  modal.querySelector('.skills-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  // Activate/Deactivate skills
+  modal.addEventListener('click', (e) => {
+    const activateBtn = e.target.closest('.skill-activate-btn');
+    if (activateBtn) {
+      const skillId = activateBtn.dataset.activateId;
+      if (SkillsEngine.activeSkill && SkillsEngine.activeSkill.id === skillId) {
+        SkillsEngine.deactivate();
+        removeSkillBadge();
+        showToast('Skill desativada');
+      } else {
+        const skill = allSkills.find(s => s.id === skillId);
+        if (skill) {
+          SkillsEngine.activate(skill);
+          showSkillBadge(skill);
+          conversationHistory[0] = { role: 'system', content: buildSystemPrompt() };
+          perpetualHistory[0] = { role: 'system', content: buildSystemPrompt() };
+          showToast(`${skill.icon} ${skill.name} ativada`);
+        }
+      }
+      modal.remove();
+      openSkillsModal(); // Re-render
+    }
+
+    const deleteBtn = e.target.closest('.skill-delete-btn');
+    if (deleteBtn) {
+      const delId = deleteBtn.dataset.deleteId;
+      if (SkillsEngine.activeSkill && SkillsEngine.activeSkill.id === delId) {
+        SkillsEngine.deactivate();
+        removeSkillBadge();
+      }
+      SkillsEngine.deleteCustom(delId);
+      showToast('Skill excluída');
+      modal.remove();
+      openSkillsModal();
+    }
+  });
+
+  // Create skill form toggle
+  modal.querySelector('#skillsCreateBtn').addEventListener('click', () => {
+    modal.querySelector('#skillsCreateForm').classList.toggle('hidden');
+  });
+  modal.querySelector('#skillFormCancel').addEventListener('click', () => {
+    modal.querySelector('#skillsCreateForm').classList.add('hidden');
+  });
+
+  // Save custom skill
+  modal.querySelector('#skillFormSave').addEventListener('click', () => {
+    const name = modal.querySelector('#skillFormName').value.trim();
+    const icon = modal.querySelector('#skillFormIcon').value.trim() || '⚡';
+    const desc = modal.querySelector('#skillFormDesc').value.trim();
+    const prompt = modal.querySelector('#skillFormPrompt').value.trim();
+    const triggersRaw = modal.querySelector('#skillFormTriggers').value.trim();
+
+    if (!name || !prompt) { showToast('Nome e prompt são obrigatórios', 'warning'); return; }
+
+    const triggerStrings = triggersRaw ? triggersRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+    SkillsEngine.addCustom({
+      name, icon, description: desc || name,
+      triggerStrings,
+      prompt: `SKILL ATIVA: ${name.toUpperCase()}\n${prompt}`,
+    });
+
+    showToast(`${icon} ${name} criada!`);
+    modal.remove();
+    openSkillsModal();
+  });
+
+  document.body.appendChild(modal);
+}
+
+// ===== SKILL BADGE =====
+function showSkillBadge(skill) {
+  removeSkillBadge();
+  const badge = document.createElement('div');
+  badge.className = 'skill-badge';
+  badge.id = 'activeSkillBadge';
+  badge.innerHTML = `<span class="skill-badge-icon">${skill.icon}</span><span class="skill-badge-name">${skill.name}</span><button class="skill-badge-close" title="Desativar">&times;</button>`;
+  badge.querySelector('.skill-badge-close').addEventListener('click', () => {
+    SkillsEngine.deactivate();
+    removeSkillBadge();
+    conversationHistory[0] = { role: 'system', content: buildSystemPrompt() };
+    perpetualHistory[0] = { role: 'system', content: buildSystemPrompt() };
+    showToast('Skill desativada');
+  });
+  // Insert before chat input area
+  const controls = document.querySelector('.controls');
+  if (controls) controls.insertAdjacentElement('beforebegin', badge);
+}
+
+function removeSkillBadge() {
+  const existing = document.getElementById('activeSkillBadge');
+  if (existing) existing.remove();
 }
 
 // ===== SELF PROFILE PANEL =====
