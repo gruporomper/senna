@@ -598,13 +598,36 @@ Nao use JSON — responda direto em markdown.`
   }
 };
 
-// ===== RADAR MANAGER (Fase 2 — placeholder) =====
+// ===== RADAR MANAGER =====
 const RadarManager = {
   STORAGE_KEY: 'senna_radar_configs',
   REPORTS_KEY: 'senna_radar_reports',
+  MAX_REPORTS: 50,
   getConfigs() { try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || []; } catch { return []; } },
   saveConfigs(c) { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(c)); },
   getReports() { try { return JSON.parse(localStorage.getItem(this.REPORTS_KEY)) || []; } catch { return []; } },
+  saveReports(r) {
+    // Keep only last MAX_REPORTS
+    const trimmed = r.slice(-this.MAX_REPORTS);
+    localStorage.setItem(this.REPORTS_KEY, JSON.stringify(trimmed));
+  },
+  addReport(report) {
+    const reports = this.getReports();
+    report.id = 'rr_' + Date.now();
+    report.createdAt = new Date().toISOString();
+    report.read = false;
+    reports.push(report);
+    this.saveReports(reports);
+    return report;
+  },
+  markRead(reportId) {
+    const reports = this.getReports();
+    const r = reports.find(x => x.id === reportId);
+    if (r) { r.read = true; this.saveReports(reports); }
+  },
+  getUnreadCount() {
+    return this.getReports().filter(r => !r.read).length;
+  },
   addConfig(config) {
     const configs = this.getConfigs();
     config.id = config.id || 'radar_' + Date.now();
@@ -614,22 +637,170 @@ const RadarManager = {
     this.saveConfigs(configs);
     return config;
   },
-  deleteConfig(id) { this.saveConfigs(this.getConfigs().filter(c => c.id !== id)); },
+  deleteConfig(id) {
+    this.saveConfigs(this.getConfigs().filter(c => c.id !== id));
+    // Also delete reports for this config
+    this.saveReports(this.getReports().filter(r => r.configId !== id));
+  },
   checkDue() {
     const now = new Date();
     return this.getConfigs().filter(c => c.active && c.nextRun && new Date(c.nextRun) <= now);
+  },
+  async executeRadar(config) {
+    const keywords = config.keywords && config.keywords.length > 0 ? ` Palavras-chave: ${config.keywords.join(', ')}.` : '';
+    const prompt = `Voce e um analista de tendencias e inteligencia de mercado.
+Faca um briefing completo e atualizado sobre: "${config.topic}".${keywords}
+
+Inclua:
+1. **Destaques** — 3-5 novidades ou fatos mais relevantes recentes
+2. **Tendencias** — Para onde o mercado/tema esta indo
+3. **Oportunidades** — O que pode ser aproveitado
+4. **Riscos** — O que ficar atento
+
+Formato markdown. Seja objetivo e pratico. Foque em informacao acionavel.`;
+
+    try {
+      const content = await callSherlockLLM(prompt);
+      if (!content) return null;
+
+      // Extract highlights from the content (first few bullet points)
+      const highlights = [];
+      const lines = content.split('\n');
+      for (const line of lines) {
+        const trimLine = line.trim();
+        if (trimLine.startsWith('- ') || trimLine.startsWith('* ')) {
+          highlights.push(trimLine.slice(2).trim());
+          if (highlights.length >= 3) break;
+        }
+      }
+
+      const report = this.addReport({
+        configId: config.id,
+        topic: config.topic,
+        summary: content,
+        highlights
+      });
+
+      // Update config nextRun and lastRun
+      const configs = this.getConfigs();
+      const cfg = configs.find(c => c.id === config.id);
+      if (cfg) {
+        cfg.lastRun = new Date().toISOString();
+        const freqDays = { weekly: 7, biweekly: 14, monthly: 30 };
+        cfg.nextRun = new Date(Date.now() + (freqDays[cfg.frequency] || 7) * 86400000).toISOString();
+        this.saveConfigs(configs);
+      }
+
+      return report;
+    } catch (e) {
+      console.error('[Radar] Execute failed:', e);
+      return null;
+    }
+  },
+  async runDueRadars() {
+    const due = this.checkDue();
+    if (due.length === 0) return 0;
+    let count = 0;
+    for (const config of due) {
+      const report = await this.executeRadar(config);
+      if (report) count++;
+    }
+    if (count > 0) {
+      loadDashRadar();
+      showToast(`Radar: ${count} relatorio${count > 1 ? 's' : ''} atualizado${count > 1 ? 's' : ''}`);
+    }
+    return count;
   }
 };
 
-// ===== DISCOVERY ENGINE (Fase 2 — placeholder) =====
+// ===== DISCOVERY ENGINE =====
 const DiscoveryEngine = {
   STORAGE_KEY: 'senna_discoveries',
   LAST_RUN_KEY: 'senna_discovery_last_run',
   getAll() { try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || []; } catch { return []; } },
+  save(discoveries) { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(discoveries)); },
   shouldRun() {
     const last = localStorage.getItem(this.LAST_RUN_KEY);
     if (!last) return true;
     return (Date.now() - new Date(last).getTime()) > 24 * 60 * 60 * 1000;
+  },
+  markStatus(id, status) {
+    const all = this.getAll();
+    const item = all.find(d => d.id === id);
+    if (item) { item.status = status; this.save(all); }
+  },
+  async run() {
+    try {
+      // Collect user context
+      const profileSummary = SelfProfileManager.getSummary() || 'Perfil nao preenchido ainda.';
+      const memories = MemoryBank.getRecent(10);
+      const memoryText = memories.length > 0
+        ? memories.map(m => `- ${m.summary}`).join('\n')
+        : 'Nenhuma memoria recente.';
+      const captures = CaptureStore.getActive().slice(0, 10);
+      const capturesText = captures.length > 0
+        ? captures.map(c => `- [${c.type}] ${c.title}`).join('\n')
+        : 'Nenhum objetivo ou projeto ativo.';
+
+      const prompt = `Voce e um assistente proativo que sugere oportunidades personalizadas.
+
+PERFIL DO USUARIO:
+${profileSummary}
+
+MEMORIAS RECENTES:
+${memoryText}
+
+OBJETIVOS/PROJETOS ATIVOS:
+${capturesText}
+
+Com base nessas informacoes, sugira 3-5 oportunidades, ferramentas, conteudos ou acoes que podem ser uteis para este usuario.
+
+Para cada sugestao, retorne um JSON VALIDO (array):
+[
+  {
+    "title": "Titulo curto",
+    "description": "Descricao em 1-2 linhas",
+    "type": "tool|content|event|opportunity|deal",
+    "reason": "Por que e relevante para este usuario"
+  }
+]
+
+Responda APENAS o JSON, sem texto adicional.`;
+
+      const content = await callSherlockLLM(prompt);
+      if (!content) return [];
+
+      // Parse JSON from response
+      let parsed = [];
+      try {
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
+        if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        console.warn('[Discoveries] JSON parse failed:', e);
+        return [];
+      }
+
+      // Format and save
+      const existing = this.getAll().filter(d => d.status === 'saved'); // Keep saved ones
+      const newDiscoveries = parsed.map((d, i) => ({
+        id: 'disc_' + Date.now() + '_' + i,
+        title: d.title || 'Sem titulo',
+        description: d.description || '',
+        type: d.type || 'opportunity',
+        reason: d.reason || '',
+        relevanceScore: 1 - (i * 0.1),
+        status: 'new',
+        createdAt: new Date().toISOString()
+      }));
+
+      this.save([...existing, ...newDiscoveries]);
+      localStorage.setItem(this.LAST_RUN_KEY, new Date().toISOString());
+      loadDashDiscoveries();
+      return newDiscoveries;
+    } catch (e) {
+      console.error('[Discoveries] Run failed:', e);
+      return [];
+    }
   }
 };
 
@@ -3025,10 +3196,10 @@ profileMenu.addEventListener('click', (e) => {
       renderSelfProfilePanel();
       break;
     case 'configuracoes':
-      console.log('Configurações');
+      openSettingsModal();
       break;
     case 'ajuda':
-      console.log('Ajuda');
+      openHelpModal();
       break;
     case 'sair':
       if (window.sennaSupabase) {
@@ -5348,9 +5519,6 @@ function updatePerpetualGreeting() {
 function renderQuickActions() {
   const container = document.getElementById('quickActions');
   if (!container) return;
-  // Stamps disabled
-  container.classList.add('hidden');
-  return;
 
   // Only show on home with no messages
   if (appMode !== 'home' || perpetualMessages.children.length > 0) {
@@ -6171,6 +6339,204 @@ function removeSkillBadge() {
   if (existing) existing.remove();
 }
 
+// ===== HELP MODAL =====
+function openHelpModal() {
+  document.querySelectorAll('.help-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'help-modal rapport-modal';
+  modal.innerHTML = `<div class="help-modal-content rapport-modal-content" style="max-width:560px">
+    <div class="rapport-header"><h3>Ajuda — SENNA</h3><button class="rapport-close">&times;</button></div>
+
+    <div class="help-section">
+      <h4>Comandos</h4>
+      <div class="help-grid">
+        <div class="help-cmd"><code>/sessao</code> Abrir nova sessao de chat</div>
+        <div class="help-cmd"><code>/cockpit</code> Cockpit Estrategico</div>
+        <div class="help-cmd"><code>/custos</code> Custos de API do mes</div>
+        <div class="help-cmd"><code>/projeto</code> Modo Projeto (planejamento guiado)</div>
+        <div class="help-cmd"><code>/sherlock [tema]</code> Pesquisa profunda</div>
+        <div class="help-cmd"><code>/radar</code> Monitoramento de topicos</div>
+        <div class="help-cmd"><code>/descobertas</code> Oportunidades personalizadas</div>
+        <div class="help-cmd"><code>/perfil</code> Perfil do usuario</div>
+        <div class="help-cmd"><code>/rapport</code> Estilo de comunicacao</div>
+        <div class="help-cmd"><code>/skills</code> Gerenciar skills</div>
+        <div class="help-cmd"><code>/skill [nome]</code> Ativar skill especifica</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <h4>Prefixos de Modelo</h4>
+      <div class="help-grid">
+        <div class="help-cmd"><code>/grok</code> Forcar xAI Grok</div>
+        <div class="help-cmd"><code>/gpt</code> Forcar OpenAI GPT</div>
+        <div class="help-cmd"><code>/gemini</code> Forcar Google Gemini</div>
+        <div class="help-cmd"><code>/claude</code> Forcar Anthropic Claude</div>
+        <div class="help-cmd"><code>/ollama</code> Forcar modelo local</div>
+        <div class="help-cmd"><code>/turbo</code> Modelo rapido/barato</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <h4>Modos</h4>
+      <div class="help-grid">
+        <div class="help-cmd"><strong>Box</strong> Chat perpetuo (home)</div>
+        <div class="help-cmd"><strong>Sessao</strong> Chat com historico isolado</div>
+        <div class="help-cmd"><strong>Cockpit</strong> Objetivos, projetos, tarefas</div>
+        <div class="help-cmd"><strong>Projeto</strong> Planejamento guiado 7 passos</div>
+        <div class="help-cmd"><strong>Sherlock</strong> Pesquisa profunda 4 fases</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <h4>Funcionalidades</h4>
+      <div class="help-grid">
+        <div class="help-cmd"><strong>Skills</strong> Auto-ativam por contexto ou manual</div>
+        <div class="help-cmd"><strong>Stamps</strong> Templates visuais para prompts</div>
+        <div class="help-cmd"><strong>Radar</strong> Monitoramento periodico de temas</div>
+        <div class="help-cmd"><strong>Descobertas</strong> Sugestoes proativas do SENNA</div>
+        <div class="help-cmd"><strong>Perfil</strong> Entrevista para personalizar o SENNA</div>
+        <div class="help-cmd"><strong>Rapport</strong> Ajuste de tom, humor, formalidade</div>
+        <div class="help-cmd"><strong>Voz</strong> Clique no microfone ou diga "Senna"</div>
+        <div class="help-cmd"><strong>Memoria</strong> SENNA lembra contexto entre sessoes</div>
+      </div>
+    </div>
+
+    <div class="help-section">
+      <h4>Dicas</h4>
+      <ul style="color:#aaa;font-size:12px;padding-left:16px;margin:0">
+        <li>Diga "Senna" para ativar por voz a qualquer momento</li>
+        <li>Skills se autoativam — ex: "escreve um email" ativa a skill de Email</li>
+        <li>Use "usa skill [nome]" para ativar manualmente</li>
+        <li>Anexe imagens ou arquivos pelo botao de clip</li>
+        <li>Arraste o chat para cima para ver historico</li>
+      </ul>
+    </div>
+
+    <p style="color:#555;font-size:10px;text-align:center;margin-top:16px">SENNA v2.0 — Grupo Romper</p>
+  </div>`;
+
+  modal.querySelector('.rapport-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+// ===== SETTINGS MODAL =====
+function openSettingsModal() {
+  document.querySelectorAll('.settings-modal').forEach(m => m.remove());
+
+  // Load current settings
+  let settings = {};
+  try { settings = JSON.parse(localStorage.getItem('senna_settings')) || {}; } catch {}
+  const defaults = { defaultProvider: '', defaultModel: '', language: 'pt-br', autoSpeak: false, walkieTalkie: false, ttsVolume: 80, dailyCostLimit: 5 };
+  settings = { ...defaults, ...settings };
+
+  const modal = document.createElement('div');
+  modal.className = 'settings-modal rapport-modal';
+  modal.innerHTML = `<div class="settings-modal-content rapport-modal-content" style="max-width:480px">
+    <div class="rapport-header"><h3>Configuracoes</h3><button class="rapport-close">&times;</button></div>
+
+    <div class="rapport-field">
+      <label>Provedor LLM padrao</label>
+      <select id="settProvider" class="pf-input">
+        <option value="">Automatico (Router)</option>
+        <option value="grok" ${settings.defaultProvider === 'grok' ? 'selected' : ''}>xAI Grok</option>
+        <option value="openai" ${settings.defaultProvider === 'openai' ? 'selected' : ''}>OpenAI</option>
+        <option value="gemini" ${settings.defaultProvider === 'gemini' ? 'selected' : ''}>Google Gemini</option>
+        <option value="claude" ${settings.defaultProvider === 'claude' ? 'selected' : ''}>Anthropic Claude</option>
+        <option value="ollama" ${settings.defaultProvider === 'ollama' ? 'selected' : ''}>Ollama (local)</option>
+      </select>
+    </div>
+
+    <div class="rapport-field">
+      <label>Modelo padrao <span style="color:#666;font-size:10px">(opcional — deixe vazio para usar o padrao do provedor)</span></label>
+      <input type="text" id="settModel" class="pf-input" placeholder="Ex: gpt-4o-mini, grok-3" value="${settings.defaultModel}">
+    </div>
+
+    <div class="rapport-field">
+      <label>Idioma</label>
+      <select id="settLang" class="pf-input">
+        <option value="pt-br" ${settings.language === 'pt-br' ? 'selected' : ''}>Portugues (BR)</option>
+        <option value="en" ${settings.language === 'en' ? 'selected' : ''}>English</option>
+        <option value="es" ${settings.language === 'es' ? 'selected' : ''}>Espanol</option>
+      </select>
+    </div>
+
+    <div class="rapport-field">
+      <label>Volume da voz <span class="rapport-val" id="settVolVal">${settings.ttsVolume}</span></label>
+      <input type="range" min="0" max="100" value="${settings.ttsVolume}" id="settVol" class="rapport-slider">
+    </div>
+
+    <div class="rapport-toggles">
+      <label class="rapport-toggle"><input type="checkbox" id="settAutoSpeak" ${settings.autoSpeak ? 'checked' : ''}> Falar respostas automaticamente</label>
+      <label class="rapport-toggle"><input type="checkbox" id="settWalkie" ${settings.walkieTalkie ? 'checked' : ''}> Modo walkie-talkie (push-to-talk)</label>
+    </div>
+
+    <div class="rapport-field">
+      <label>Limite de custo diario (USD)</label>
+      <input type="number" id="settCostLimit" class="pf-input" min="0" step="0.5" value="${settings.dailyCostLimit}">
+    </div>
+
+    <button class="rapport-save" id="settSave">Salvar</button>
+
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06)">
+      <button class="settings-danger-btn" id="settClearData">Limpar todos os dados locais</button>
+    </div>
+  </div>`;
+
+  // Volume slider live value
+  modal.querySelector('#settVol').addEventListener('input', (e) => {
+    modal.querySelector('#settVolVal').textContent = e.target.value;
+  });
+
+  // Close
+  modal.querySelector('.rapport-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  // Save
+  modal.querySelector('#settSave').addEventListener('click', () => {
+    const newSettings = {
+      defaultProvider: modal.querySelector('#settProvider').value,
+      defaultModel: modal.querySelector('#settModel').value.trim(),
+      language: modal.querySelector('#settLang').value,
+      ttsVolume: parseInt(modal.querySelector('#settVol').value),
+      autoSpeak: modal.querySelector('#settAutoSpeak').checked,
+      walkieTalkie: modal.querySelector('#settWalkie').checked,
+      dailyCostLimit: parseFloat(modal.querySelector('#settCostLimit').value) || 5
+    };
+    localStorage.setItem('senna_settings', JSON.stringify(newSettings));
+
+    // Apply voice settings immediately
+    if (window.VoiceEngine) {
+      window.VoiceEngine.volume = newSettings.ttsVolume / 100;
+      if (newSettings.walkieTalkie !== settings.walkieTalkie) {
+        window.walkieTalkieMode = newSettings.walkieTalkie;
+      }
+    }
+
+    showToast('Configuracoes salvas');
+    modal.remove();
+  });
+
+  // Clear data
+  modal.querySelector('#settClearData').addEventListener('click', () => {
+    if (confirm('Tem certeza? Isso vai apagar todas as sessoes, capturas, skills personalizadas e configuracoes locais. Dados no servidor (memorias) serao mantidos.')) {
+      const keysToKeep = ['senna_supabase_token'];
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('senna_') && !keysToKeep.includes(key)) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(k => localStorage.removeItem(k));
+      showToast('Dados locais limpos. Recarregando...');
+      setTimeout(() => location.reload(), 1500);
+    }
+  });
+
+  document.body.appendChild(modal);
+}
+
 // ===== SELF PROFILE PANEL =====
 function renderSelfProfilePanel() {
   const panel = document.getElementById('selfProfilePanel');
@@ -6678,68 +7044,251 @@ async function callSherlockLLM(prompt) {
 function openRadarConfig() {
   document.querySelectorAll('.radar-modal').forEach(m => m.remove());
   const configs = RadarManager.getConfigs();
+  const reports = RadarManager.getReports();
+  const freqLabels = { weekly: 'Semanal', biweekly: 'Quinzenal', monthly: 'Mensal' };
+
   const modal = document.createElement('div');
   modal.className = 'radar-modal rapport-modal';
-  modal.innerHTML = `<div class="rapport-modal-content">
+  modal.innerHTML = `<div class="rapport-modal-content" style="max-width:560px">
     <div class="rapport-header"><h3>Radar — Monitoramento</h3><button class="rapport-close">&times;</button></div>
-    <p style="color:var(--text-dim);margin-bottom:12px">Configure topicos para monitoramento periodico.</p>
-    <div class="radar-list" id="radarList">
-      ${configs.length > 0 ? configs.map(c => `<div class="radar-item"><strong>${escapeHtml(c.topic)}</strong> — ${c.frequency}<button class="radar-delete" data-id="${c.id}">&times;</button></div>`).join('') : '<p style="color:var(--text-dim)">Nenhum radar configurado</p>'}
+
+    <div class="radar-tabs">
+      <button class="radar-tab active" data-tab="configs">Topicos (${configs.length})</button>
+      <button class="radar-tab" data-tab="reports">Relatorios (${reports.length})</button>
     </div>
-    <div style="margin-top:12px">
-      <input type="text" class="pf-input" id="radarTopic" placeholder="Topico (ex: Inteligencia Artificial)">
-      <select class="pf-input" id="radarFreq" style="margin-top:6px"><option value="weekly">Semanal</option><option value="biweekly">Quinzenal</option><option value="monthly">Mensal</option></select>
-      <button class="rapport-save" id="radarAdd" style="margin-top:8px">Adicionar</button>
+
+    <div class="radar-tab-content" id="radarConfigsTab">
+      <div class="radar-list">
+        ${configs.length > 0 ? configs.map(c => {
+          const lastRun = c.lastRun ? new Date(c.lastRun).toLocaleDateString('pt-BR') : 'Nunca';
+          return `<div class="radar-item">
+            <div class="radar-item-info">
+              <strong>${escapeHtml(c.topic)}</strong>
+              <span class="radar-item-meta">${freqLabels[c.frequency] || c.frequency} — Ultima: ${lastRun}</span>
+            </div>
+            <div class="radar-item-actions">
+              <button class="radar-exec-btn" data-exec-id="${c.id}" title="Executar agora">&#9654;</button>
+              <button class="radar-delete" data-id="${c.id}" title="Excluir">&times;</button>
+            </div>
+          </div>`;
+        }).join('') : '<p style="color:#666;font-size:12px">Nenhum radar configurado.</p>'}
+      </div>
+      <div style="margin-top:12px">
+        <input type="text" class="pf-input" id="radarTopic" placeholder="Topico (ex: Inteligencia Artificial)">
+        <input type="text" class="pf-input" id="radarKeywords" placeholder="Palavras-chave (opcional, separadas por virgula)" style="margin-top:6px">
+        <select class="pf-input" id="radarFreq" style="margin-top:6px"><option value="weekly">Semanal</option><option value="biweekly">Quinzenal</option><option value="monthly">Mensal</option></select>
+        <button class="rapport-save" id="radarAdd" style="margin-top:8px">Adicionar Radar</button>
+      </div>
     </div>
-    <p style="color:var(--text-dim);font-size:11px;margin-top:12px">Execucao automatica sera ativada na Fase 2 com web search.</p>
+
+    <div class="radar-tab-content hidden" id="radarReportsTab">
+      ${reports.length > 0 ? reports.slice().reverse().map(r => `<div class="radar-report ${r.read ? '' : 'unread'}" data-report-id="${r.id}">
+        <div class="radar-report-header">
+          <strong>${escapeHtml(r.topic)}</strong>
+          <span class="radar-report-date">${new Date(r.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+        ${r.highlights && r.highlights.length > 0 ? `<ul class="radar-report-highlights">${r.highlights.map(h => `<li>${escapeHtml(h)}</li>`).join('')}</ul>` : ''}
+        <div class="radar-report-body hidden">${formatMessage(r.summary, 'assistant')}</div>
+        <button class="radar-report-toggle">Ver relatorio completo</button>
+      </div>`).join('') : '<p style="color:#666;font-size:12px">Nenhum relatorio gerado. Execute um radar ou aguarde a execucao automatica.</p>'}
+    </div>
   </div>`;
 
+  // Tab switching
+  modal.querySelectorAll('.radar-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      modal.querySelectorAll('.radar-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      modal.querySelector('#radarConfigsTab').classList.toggle('hidden', tab.dataset.tab !== 'configs');
+      modal.querySelector('#radarReportsTab').classList.toggle('hidden', tab.dataset.tab !== 'reports');
+    });
+  });
+
+  // Close
   modal.querySelector('.rapport-close').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  // Delete config
   modal.querySelectorAll('.radar-delete').forEach(btn => {
-    btn.addEventListener('click', () => { RadarManager.deleteConfig(btn.dataset.id); openRadarConfig(); });
+    btn.addEventListener('click', () => { RadarManager.deleteConfig(btn.dataset.id); modal.remove(); openRadarConfig(); });
   });
+
+  // Execute now
+  modal.querySelectorAll('.radar-exec-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const config = configs.find(c => c.id === btn.dataset.execId);
+      if (!config) return;
+      btn.disabled = true;
+      btn.textContent = '...';
+      showToast(`Executando radar: ${config.topic}...`);
+      const report = await RadarManager.executeRadar(config);
+      if (report) {
+        showToast(`Relatorio gerado: ${config.topic}`);
+        loadDashRadar();
+      } else {
+        showToast('Erro ao executar radar', 'error');
+      }
+      modal.remove();
+      openRadarConfig();
+    });
+  });
+
+  // Add config
   modal.querySelector('#radarAdd')?.addEventListener('click', () => {
     const topic = modal.querySelector('#radarTopic').value.trim();
     const freq = modal.querySelector('#radarFreq').value;
+    const keywordsRaw = modal.querySelector('#radarKeywords').value.trim();
     if (!topic) return;
+    const keywords = keywordsRaw ? keywordsRaw.split(',').map(k => k.trim()).filter(Boolean) : [];
     const freqDays = { weekly: 7, biweekly: 14, monthly: 30 };
     const nextRun = new Date(Date.now() + freqDays[freq] * 86400000).toISOString();
-    RadarManager.addConfig({ topic, frequency: freq, nextRun, keywords: [] });
+    RadarManager.addConfig({ topic, frequency: freq, nextRun, keywords });
     showToast(`Radar adicionado: ${topic}`);
+    modal.remove();
     openRadarConfig();
+  });
+
+  // Report expand/collapse + mark read
+  modal.querySelectorAll('.radar-report-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const report = btn.closest('.radar-report');
+      const body = report.querySelector('.radar-report-body');
+      body.classList.toggle('hidden');
+      btn.textContent = body.classList.contains('hidden') ? 'Ver relatorio completo' : 'Ocultar';
+      // Mark as read
+      const reportId = report.dataset.reportId;
+      RadarManager.markRead(reportId);
+      report.classList.remove('unread');
+      loadDashRadar();
+    });
   });
 
   document.body.appendChild(modal);
 }
 
-// ===== DISCOVERIES PANEL (placeholder — Fase 2) =====
+// ===== DISCOVERIES PANEL =====
 function openDiscoveriesPanel() {
   const discoveries = DiscoveryEngine.getAll();
   document.querySelectorAll('.disc-modal').forEach(m => m.remove());
+
+  const typeIcons = { tool: '🔧', content: '📚', event: '📅', opportunity: '💡', deal: '💰' };
+
   const modal = document.createElement('div');
   modal.className = 'disc-modal rapport-modal';
-  modal.innerHTML = `<div class="rapport-modal-content">
+  modal.innerHTML = `<div class="rapport-modal-content" style="max-width:560px">
     <div class="rapport-header"><h3>Descobertas</h3><button class="rapport-close">&times;</button></div>
-    <p style="color:var(--text-dim);margin-bottom:12px">Oportunidades personalizadas baseadas no seu perfil.</p>
-    ${discoveries.length > 0
-      ? discoveries.map(d => `<div class="disc-item"><strong>${escapeHtml(d.title)}</strong><p>${escapeHtml(d.description)}</p><small>${d.reason}</small></div>`).join('')
-      : '<p style="color:var(--text-dim)">Nenhuma descoberta ainda. Preencha seu Perfil e ative na Fase 2.</p>'}
+    <p style="color:#888;font-size:12px;margin-bottom:12px">Oportunidades personalizadas baseadas no seu perfil e objetivos.</p>
+
+    <div class="disc-filters">
+      <button class="disc-filter active" data-filter="all">Todas</button>
+      <button class="disc-filter" data-filter="new">Novas</button>
+      <button class="disc-filter" data-filter="saved">Salvas</button>
+    </div>
+
+    <div class="disc-list" id="discList">
+      ${discoveries.length > 0
+        ? discoveries.map(d => `<div class="disc-card" data-disc-id="${d.id}" data-status="${d.status}">
+            <div class="disc-card-header">
+              <span class="disc-card-icon">${typeIcons[d.type] || '💡'}</span>
+              <span class="disc-card-title">${escapeHtml(d.title)}</span>
+              <span class="disc-card-type">${d.type}</span>
+            </div>
+            <p class="disc-card-desc">${escapeHtml(d.description)}</p>
+            <p class="disc-card-reason">${escapeHtml(d.reason)}</p>
+            <div class="disc-card-actions">
+              ${d.status === 'saved' ? '<span style="color:var(--yellow);font-size:11px">Salva</span>' : `
+                <button class="disc-action-btn" data-action="save" data-disc-id="${d.id}">Salvar</button>
+                <button class="disc-action-btn" data-action="dismiss" data-disc-id="${d.id}">Descartar</button>
+              `}
+              <button class="disc-action-btn disc-more-btn" data-action="more" data-disc-title="${escapeHtml(d.title)}">Saber mais</button>
+            </div>
+          </div>`).join('')
+        : '<p style="color:#666;font-size:12px;padding:20px 0;text-align:center">Nenhuma descoberta ainda. Clique em "Gerar descobertas" ou preencha seu Perfil para melhores resultados.</p>'}
+    </div>
+
+    <button class="skills-create-btn" id="discGenerate" style="margin-top:12px">Gerar descobertas</button>
   </div>`;
+
+  // Close
   modal.querySelector('.rapport-close').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+  // Filters
+  modal.querySelectorAll('.disc-filter').forEach(btn => {
+    btn.addEventListener('click', () => {
+      modal.querySelectorAll('.disc-filter').forEach(f => f.classList.remove('active'));
+      btn.classList.add('active');
+      const filter = btn.dataset.filter;
+      modal.querySelectorAll('.disc-card').forEach(card => {
+        if (filter === 'all') card.style.display = '';
+        else card.style.display = card.dataset.status === filter ? '' : 'none';
+      });
+    });
+  });
+
+  // Card actions
+  modal.addEventListener('click', (e) => {
+    const actionBtn = e.target.closest('.disc-action-btn');
+    if (!actionBtn) return;
+    const action = actionBtn.dataset.action;
+    const discId = actionBtn.dataset.discId;
+
+    if (action === 'save') {
+      DiscoveryEngine.markStatus(discId, 'saved');
+      showToast('Descoberta salva');
+      modal.remove();
+      openDiscoveriesPanel();
+    } else if (action === 'dismiss') {
+      DiscoveryEngine.markStatus(discId, 'dismissed');
+      const card = actionBtn.closest('.disc-card');
+      if (card) card.style.display = 'none';
+      loadDashDiscoveries();
+    } else if (action === 'more') {
+      const title = actionBtn.dataset.discTitle;
+      modal.remove();
+      setAppMode('home');
+      textInput.value = `Me conte mais sobre: ${title}`;
+      textInput.focus();
+    }
+  });
+
+  // Generate discoveries
+  modal.querySelector('#discGenerate').addEventListener('click', async () => {
+    const btn = modal.querySelector('#discGenerate');
+    btn.disabled = true;
+    btn.textContent = 'Gerando...';
+    showToast('Gerando descobertas personalizadas...');
+    const results = await DiscoveryEngine.run();
+    if (results.length > 0) {
+      showToast(`${results.length} novas descobertas!`);
+    } else {
+      showToast('Nenhuma descoberta gerada. Preencha seu perfil para melhores resultados.', 'warning');
+    }
+    modal.remove();
+    openDiscoveriesPanel();
+  });
+
   document.body.appendChild(modal);
 }
 
 // ===== DASHBOARD WIDGETS: Radar + Discoveries =====
 function loadDashRadar() {
   const el = document.getElementById('dashRadarCount');
-  if (el) el.textContent = RadarManager.getConfigs().filter(c => c.active).length;
+  if (el) {
+    const unread = RadarManager.getUnreadCount();
+    const active = RadarManager.getConfigs().filter(c => c.active).length;
+    el.textContent = unread > 0 ? unread : active;
+    el.classList.toggle('has-unread', unread > 0);
+  }
 }
 
 function loadDashDiscoveries() {
   const el = document.getElementById('dashDiscCount');
-  if (el) el.textContent = DiscoveryEngine.getAll().filter(d => d.status === 'new').length;
+  if (el) {
+    const count = DiscoveryEngine.getAll().filter(d => d.status === 'new').length;
+    el.textContent = count;
+    el.classList.toggle('has-unread', count > 0);
+  }
 }
 
 async function checkVersion() {
@@ -6823,6 +7372,22 @@ function init() {
   document.getElementById('navProjeto')?.addEventListener('click', () => initProjectFlow());
   document.getElementById('navSherlock')?.addEventListener('click', () => initSherlock());
   document.getElementById('navRadar')?.addEventListener('click', () => openRadarConfig());
+
+  // Background tasks: Radar auto-execution + Discoveries generation
+  // Run after a short delay to not block UI initialization
+  setTimeout(async () => {
+    // Run due radars
+    try { await RadarManager.runDueRadars(); } catch (e) { console.warn('[Radar] Auto-run failed:', e); }
+    // Run discoveries if due
+    try {
+      if (DiscoveryEngine.shouldRun()) {
+        const results = await DiscoveryEngine.run();
+        if (results.length > 0) {
+          showToast(`${results.length} novas descobertas disponíveis`);
+        }
+      }
+    } catch (e) { console.warn('[Discoveries] Auto-run failed:', e); }
+  }, 5000);
 }
 
 init();

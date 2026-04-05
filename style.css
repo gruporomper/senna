@@ -4457,3 +4457,111 @@ body.state-speaking .cockpit-state { color: #50C878; }
 @media (max-width: 768px) {
   .skills-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== HELP MODAL ===== */
+.help-section { margin-bottom: 18px; }
+.help-section h4 {
+  font-size: 11px; color: var(--yellow); text-transform: uppercase; letter-spacing: 0.5px;
+  font-family: 'Orbitron', monospace; margin-bottom: 8px;
+  padding-bottom: 4px; border-bottom: 1px solid rgba(255,215,0,0.1);
+}
+.help-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.help-cmd { font-size: 12px; color: #ccc; padding: 4px 0; }
+.help-cmd code {
+  background: rgba(255,215,0,0.08); color: var(--yellow); padding: 1px 6px;
+  border-radius: 4px; font-size: 11px; margin-right: 4px;
+}
+.help-cmd strong { color: var(--yellow); font-size: 11px; margin-right: 4px; }
+
+/* ===== SETTINGS MODAL ===== */
+.settings-danger-btn {
+  background: rgba(255,60,60,0.1); border: 1px solid rgba(255,60,60,0.25);
+  color: #ff6b6b; padding: 8px 16px; border-radius: 8px; cursor: pointer;
+  font-size: 12px; width: 100%; transition: background 0.2s;
+}
+.settings-danger-btn:hover { background: rgba(255,60,60,0.2); }
+
+/* ===== RADAR TABS & REPORTS ===== */
+.radar-tabs {
+  display: flex; gap: 4px; margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;
+}
+.radar-tab {
+  background: none; border: 1px solid rgba(255,255,255,0.1); color: #aaa;
+  padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: 12px;
+  transition: all 0.2s;
+}
+.radar-tab.active { background: rgba(255,215,0,0.1); border-color: rgba(255,215,0,0.3); color: var(--yellow); }
+.radar-tab:hover { border-color: rgba(255,215,0,0.2); }
+.radar-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 10px; background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; margin-bottom: 6px;
+}
+.radar-item-info { flex: 1; }
+.radar-item-info strong { font-size: 13px; color: #eee; display: block; }
+.radar-item-meta { font-size: 10px; color: #777; }
+.radar-item-actions { display: flex; gap: 6px; }
+.radar-exec-btn {
+  background: rgba(255,215,0,0.1); border: 1px solid rgba(255,215,0,0.2);
+  color: var(--yellow); width: 28px; height: 28px; border-radius: 6px;
+  cursor: pointer; font-size: 12px; transition: background 0.2s;
+}
+.radar-exec-btn:hover { background: rgba(255,215,0,0.2); }
+.radar-exec-btn:disabled { opacity: 0.5; cursor: wait; }
+.radar-delete {
+  background: none; border: 1px solid rgba(255,60,60,0.15);
+  color: #888; width: 28px; height: 28px; border-radius: 6px;
+  cursor: pointer; font-size: 16px;
+}
+.radar-delete:hover { color: #ff4444; border-color: rgba(255,60,60,0.3); }
+.radar-report {
+  padding: 10px 12px; background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; margin-bottom: 8px;
+}
+.radar-report.unread { border-left: 3px solid var(--yellow); }
+.radar-report-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.radar-report-header strong { font-size: 13px; color: #eee; }
+.radar-report-date { font-size: 10px; color: #777; }
+.radar-report-highlights { margin: 6px 0; padding-left: 16px; }
+.radar-report-highlights li { font-size: 12px; color: #bbb; margin-bottom: 2px; }
+.radar-report-body { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); }
+.radar-report-toggle {
+  background: none; border: none; color: var(--yellow); font-size: 11px;
+  cursor: pointer; padding: 4px 0; opacity: 0.7;
+}
+.radar-report-toggle:hover { opacity: 1; }
+.has-unread { color: var(--yellow) !important; font-weight: 700; }
+
+/* ===== DISCOVERY CARDS ===== */
+.disc-filters { display: flex; gap: 4px; margin-bottom: 12px; }
+.disc-filter {
+  background: none; border: 1px solid rgba(255,255,255,0.1); color: #aaa;
+  padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 11px;
+}
+.disc-filter.active { background: rgba(255,215,0,0.1); border-color: rgba(255,215,0,0.3); color: var(--yellow); }
+.disc-card {
+  padding: 12px; background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; margin-bottom: 8px;
+}
+.disc-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.disc-card-icon { font-size: 18px; }
+.disc-card-title { font-size: 13px; font-weight: 600; color: #eee; flex: 1; }
+.disc-card-type {
+  font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: 0.5px;
+  background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;
+}
+.disc-card-desc { font-size: 12px; color: #bbb; line-height: 1.4; margin-bottom: 4px; }
+.disc-card-reason { font-size: 11px; color: var(--yellow); opacity: 0.7; margin-bottom: 8px; font-style: italic; }
+.disc-card-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.disc-action-btn {
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+  color: #aaa; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 11px;
+  transition: all 0.2s;
+}
+.disc-action-btn:hover { border-color: rgba(255,215,0,0.3); color: var(--yellow); }
+.disc-more-btn { color: var(--yellow); border-color: rgba(255,215,0,0.2); }
+
+@media (max-width: 768px) {
+  .help-grid { grid-template-columns: 1fr; }
+}
