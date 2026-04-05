@@ -4046,12 +4046,14 @@ function showBudgetConfirmModal(senna) {
 // ===== MODEL BADGE =====
 function appendModelBadge(msgElement) {
   if (!lastLLMResponse || !msgElement) return;
-  const badge = document.createElement('span');
-  badge.className = 'model-badge';
-  badge.textContent = lastLLMResponse.model || lastLLMResponse.provider || '';
-  badge.title = `Provider: ${lastLLMResponse.provider} | Complexidade: ${lastLLMResponse.complexity} | Custo: $${(lastLLMResponse.cost || 0).toFixed(6)}`;
-  const content = msgElement.querySelector('.msg-content');
-  if (content) content.appendChild(badge);
+  const model = lastLLMResponse.model || lastLLMResponse.provider || '';
+  if (!model) return;
+  const badge = document.createElement('button');
+  badge.className = 'msg-action-btn model-badge-btn';
+  badge.title = `${model.toUpperCase()}\nProvider: ${lastLLMResponse.provider} | Complexidade: ${lastLLMResponse.complexity} | Custo: $${(lastLLMResponse.cost || 0).toFixed(6)}`;
+  badge.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`;
+  const actionsEl = msgElement.querySelector('.msg-actions');
+  if (actionsEl) actionsEl.appendChild(badge);
 }
 
 // ===== PROCESS COMMAND =====
