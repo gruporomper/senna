@@ -2974,6 +2974,8 @@ async function callGrokAPIStream(userMessage, targetElement, forceProvider = nul
   let buffer = '';
   const contentEl = targetElement.querySelector('.msg-content');
 
+  let streamDone = false;
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -3002,6 +3004,7 @@ async function callGrokAPIStream(userMessage, targetElement, forceProvider = nul
           if (data._senna?.budgetWarning) {
             showToast(data._senna.budgetWarning, 'warning');
           }
+          streamDone = true;
         }
         // Strategic capture from server-side classification
         if (data.captures && data.captures.length > 0) {
@@ -3021,6 +3024,38 @@ async function callGrokAPIStream(userMessage, targetElement, forceProvider = nul
         if (e.message && !e.message.includes('JSON')) throw e;
       }
     }
+
+    // Exit loop immediately when done — don't wait for res.end() (captures classification may take seconds)
+    if (streamDone) break;
+  }
+
+  // Continue reading captures in background (stream may still be open for classification)
+  if (streamDone) {
+    (async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const tail = decoder.decode(value, { stream: true });
+          for (const line of tail.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.captures && data.captures.length > 0) {
+                const sessionId = activeConversationId || null;
+                const mode = appMode === 'home' ? 'box' : 'session';
+                CaptureStore.addBatch(data.captures.map(c => ({
+                  ...c, sourceSessionId: sessionId, sourceMode: mode
+                })));
+                const labels = data.captures.map(c => CaptureStore.TYPE_LABELS[c.type] || c.type).join(', ');
+                showToast(`Capturei: ${labels}`);
+                loadDashCaptures();
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    })();
   }
 
   history.push({ role: 'assistant', content: fullContent });
