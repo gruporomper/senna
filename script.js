@@ -181,6 +181,135 @@ const SennaDB = {
   }
 };
 
+// ===== CAPTURE STORE (Cockpit Estratégico) =====
+const CaptureStore = {
+  KEY: 'senna_captures',
+  TYPES: ['idea', 'task', 'goal', 'strategy', 'schedule', 'insight'],
+  TYPE_LABELS: { idea: 'Ideia', task: 'Tarefa', goal: 'Meta', strategy: 'Estratégia', schedule: 'Agenda', insight: 'Insight' },
+  TYPE_COLORS: { idea: '#FFD700', task: '#00dce8', goal: '#00ff88', strategy: '#a855f7', schedule: '#f59e0b', insight: '#3b82f6' },
+
+  getAll() {
+    try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); }
+    catch { return []; }
+  },
+
+  saveAll(captures) {
+    localStorage.setItem(this.KEY, JSON.stringify(captures));
+  },
+
+  getByType(type) { return this.getAll().filter(c => c.type === type); },
+  getByStatus(status) { return this.getAll().filter(c => c.status === status); },
+  getActive() { return this.getAll().filter(c => c.status === 'open' || c.status === 'in_progress'); },
+
+  getCounts() {
+    const all = this.getAll().filter(c => c.status !== 'archived');
+    const now = new Date();
+    const counts = { total: all.length, overdue: 0 };
+    this.TYPES.forEach(t => counts[t] = 0);
+    all.forEach(c => {
+      counts[c.type] = (counts[c.type] || 0) + 1;
+      if (c.deadline && c.status === 'open' && new Date(c.deadline) < now) counts.overdue++;
+    });
+    return counts;
+  },
+
+  async add(capture) {
+    const item = {
+      id: 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      type: capture.type || 'idea',
+      title: (capture.title || '').substring(0, 150),
+      body: capture.body || '',
+      status: capture.status || 'open',
+      priority: capture.priority || 'medium',
+      deadline: capture.deadline || null,
+      tags: capture.tags || [],
+      sourceSessionId: capture.sourceSessionId || null,
+      sourceMode: capture.sourceMode || 'session',
+      parentId: capture.parentId || null,
+      progress: capture.progress || 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    const all = this.getAll();
+    all.unshift(item);
+    this.saveAll(all);
+
+    if (supabaseClient && currentUserId) {
+      try {
+        await supabaseClient.from('senna_captures').insert({
+          user_id: currentUserId,
+          type: item.type, title: item.title, body: item.body,
+          status: item.status, priority: item.priority,
+          deadline: item.deadline, tags: item.tags,
+          source_session_id: item.sourceSessionId,
+          source_mode: item.sourceMode,
+          parent_id: item.parentId, progress: item.progress
+        });
+      } catch (e) { console.error('[CAPTURE] Sync error:', e); }
+    }
+    return item;
+  },
+
+  async addBatch(captures) {
+    const items = captures.map(c => ({
+      id: 'cap_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      type: c.type || 'idea',
+      title: (c.title || '').substring(0, 150),
+      body: c.body || '',
+      status: 'open',
+      priority: c.priority || 'medium',
+      deadline: c.deadline || null,
+      tags: c.tags || [],
+      sourceSessionId: c.sourceSessionId || null,
+      sourceMode: c.sourceMode || 'session',
+      parentId: null,
+      progress: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }));
+    const all = this.getAll();
+    items.forEach(i => all.unshift(i));
+    this.saveAll(all);
+
+    if (supabaseClient && currentUserId) {
+      try {
+        await supabaseClient.from('senna_captures').insert(
+          items.map(i => ({
+            user_id: currentUserId,
+            type: i.type, title: i.title, body: i.body,
+            status: i.status, priority: i.priority,
+            deadline: i.deadline, tags: i.tags,
+            source_session_id: i.sourceSessionId,
+            source_mode: i.sourceMode
+          }))
+        );
+      } catch (e) { console.error('[CAPTURE] Batch sync error:', e); }
+    }
+    return items;
+  },
+
+  async updateStatus(id, status) {
+    const all = this.getAll();
+    const item = all.find(c => c.id === id);
+    if (!item) return;
+    item.status = status;
+    item.updatedAt = new Date().toISOString();
+    this.saveAll(all);
+  },
+
+  async update(id, changes) {
+    const all = this.getAll();
+    const item = all.find(c => c.id === id);
+    if (!item) return;
+    Object.assign(item, changes, { updatedAt: new Date().toISOString() });
+    this.saveAll(all);
+  },
+
+  async delete(id) {
+    this.saveAll(this.getAll().filter(c => c.id !== id));
+  }
+};
+
 // One-time sync: push localStorage data to Supabase for existing users
 async function syncLocalToSupabase() {
   if (!supabaseClient || !currentUserId) return;
@@ -586,7 +715,15 @@ OUTPUT ACTION PROTOCOL:
 
 ${typeof BUSINESS_CONTEXT !== 'undefined' ? BUSINESS_CONTEXT : ''}
 
-You know everything about Grupo Romper. Use that knowledge for contextualized, strategic, no-holds-barred answers. Go as deep and long as needed.`;
+You know everything about Grupo Romper. Use that knowledge for contextualized, strategic, no-holds-barred answers. Go as deep and long as needed.
+
+CAPTURA ESTRATÉGICA:
+O sistema captura automaticamente ideias, tarefas, metas, estratégias e agendamentos da conversa.
+- NÃO pergunte "quer que eu anote?" — o sistema faz sozinho em background.
+- Se perceber que capturou algo, diga brevemente "Anotei, Senhor" sem interromper o fluxo.
+- Se o usuário disser "anota", "salva", "captura" — confirme: "Anotado no cockpit."
+- Se perguntar "o que anotamos?", referencie o Cockpit Estratégico.
+- Nunca repita o conteúdo completo da captura — seja breve e natural.`;
 
 // ===== SESSION MANAGER (localStorage) =====
 // Replaces ConversationManager with richer session model
@@ -1285,15 +1422,30 @@ async function extractMemory(conversationId) {
 
 // ===== CONVERSATION HISTORY =====
 function buildSystemPrompt() {
+  let ctx = '';
+
   const recentMemories = MemoryBank.getRecent(5);
-  if (recentMemories.length === 0) return SYSTEM_PROMPT;
-  let ctx = '\n\n## MEMORIAS RECENTES (sessoes anteriores)\n';
-  recentMemories.forEach(m => {
-    ctx += `- [${m.sourceTitle}]: ${m.summary}`;
-    if (m.decisions.length) ctx += ` | Decisoes: ${m.decisions.join('; ')}`;
-    if (m.todos.length) ctx += ` | Pendencias: ${m.todos.join('; ')}`;
-    ctx += '\n';
-  });
+  if (recentMemories.length > 0) {
+    ctx += '\n\n## MEMORIAS RECENTES (sessoes anteriores)\n';
+    recentMemories.forEach(m => {
+      ctx += `- [${m.sourceTitle}]: ${m.summary}`;
+      if (m.decisions.length) ctx += ` | Decisoes: ${m.decisions.join('; ')}`;
+      if (m.todos.length) ctx += ` | Pendencias: ${m.todos.join('; ')}`;
+      ctx += '\n';
+    });
+  }
+
+  const activeCaptures = CaptureStore.getActive().slice(0, 10);
+  if (activeCaptures.length > 0) {
+    ctx += '\n\n## COCKPIT ESTRATÉGICO — ITENS ATIVOS\n';
+    activeCaptures.forEach(c => {
+      ctx += `- [${c.type.toUpperCase()}] ${c.title}`;
+      if (c.deadline) ctx += ` (prazo: ${new Date(c.deadline).toLocaleDateString('pt-BR')})`;
+      if (c.status === 'in_progress') ctx += ' [EM ANDAMENTO]';
+      ctx += '\n';
+    });
+  }
+
   return SYSTEM_PROMPT + ctx;
 }
 
@@ -2239,6 +2391,7 @@ function closeSession() {
   updateDashSessionCount();
   loadDashTasks();
   loadDashNotes();
+  loadDashCaptures();
   loadCostWidget();
   renderQuickActions();
   setAppMode('home');
@@ -2387,6 +2540,23 @@ function setAppMode(mode) {
     chatArea.style.display = 'flex';
     if (sessionPrechatHero) sessionPrechatHero.style.display = 'none';
     if (mainStripe) mainStripe.style.display = '';
+    const cePanel = document.getElementById('cockpitEstrategico');
+    if (cePanel) cePanel.style.display = 'none';
+  } else if (mode === 'cockpit') {
+    perpetualHome.style.display = 'none';
+    cockpit.style.display = 'none';
+    chatArea.style.display = 'none';
+    if (sessionPrechatHero) sessionPrechatHero.style.display = 'none';
+    if (mainStripe) mainStripe.style.display = 'none';
+    const cePanel = document.getElementById('cockpitEstrategico');
+    if (cePanel) cePanel.style.display = 'flex';
+    renderCockpit();
+  }
+
+  // Hide cockpit panel when not in cockpit mode
+  if (mode !== 'cockpit') {
+    const cePanel = document.getElementById('cockpitEstrategico');
+    if (cePanel) cePanel.style.display = 'none';
   }
 }
 
@@ -2832,6 +3002,17 @@ async function callGrokAPIStream(userMessage, targetElement, forceProvider = nul
           if (data._senna?.budgetWarning) {
             showToast(data._senna.budgetWarning, 'warning');
           }
+        }
+        // Strategic capture from server-side classification
+        if (data.captures && data.captures.length > 0) {
+          const sessionId = activeConversationId || null;
+          const mode = appMode === 'home' ? 'box' : 'session';
+          CaptureStore.addBatch(data.captures.map(c => ({
+            ...c, sourceSessionId: sessionId, sourceMode: mode
+          })));
+          const labels = data.captures.map(c => CaptureStore.TYPE_LABELS[c.type] || c.type).join(', ');
+          showToast(`Capturei: ${labels}`);
+          loadDashCaptures();
         }
         if (data.error) {
           throw new Error(data.error);
@@ -3726,14 +3907,18 @@ messagesWrap.addEventListener('click', (e) => {
   } else if (action === 'save-note') {
     const noteText = rawText.substring(0, 300);
     SennaDB.addNote(noteText, 'assistant');
+    CaptureStore.add({ type: 'idea', title: noteText.substring(0, 150), body: noteText, priority: 'medium', sourceMode: appMode === 'home' ? 'box' : 'session', sourceSessionId: activeConversationId || null });
     SennaMetrics.track('note_saved');
     showToast('Salvo nas notas');
+    loadDashCaptures();
   } else if (action === 'save-task') {
     const lines = rawText.split('\n').filter(l => l.trim());
     const taskText = lines[0]?.substring(0, 150) || rawText.substring(0, 150);
     SennaDB.addTask(taskText, 'assistant');
+    CaptureStore.add({ type: 'task', title: taskText, body: rawText.substring(0, 300), priority: 'medium', sourceMode: appMode === 'home' ? 'box' : 'session', sourceSessionId: activeConversationId || null });
     SennaMetrics.track('task_saved');
     showToast('Tarefa criada');
+    loadDashCaptures();
   }
 });
 
@@ -4527,7 +4712,12 @@ function initDashboard() {
   updateDashSessionCount();
   loadDashTasks();
   loadDashNotes();
+  loadDashCaptures();
   renderQuickActions();
+
+  // Dashboard cockpit widget click → open cockpit
+  const dashCockpit = document.getElementById('dashCockpit');
+  if (dashCockpit) dashCockpit.addEventListener('click', () => setAppMode('cockpit'));
 }
 
 function updateDashClock() {
@@ -4680,6 +4870,150 @@ function loadDashNotes() {
     listEl.appendChild(li);
   });
 }
+
+// ===== COCKPIT ESTRATÉGICO =====
+let ceFilter = 'all';
+let ceStatus = 'open';
+
+function loadDashCaptures() {
+  const counts = CaptureStore.getCounts();
+  const el = document.getElementById('dashCockpitCount');
+  if (el) el.textContent = counts.total;
+  const listEl = document.getElementById('dashCockpitList');
+  if (listEl) {
+    const active = CaptureStore.getActive().slice(0, 3);
+    listEl.innerHTML = '';
+    active.forEach(c => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="ce-mini-dot" style="background:${CaptureStore.TYPE_COLORS[c.type]}"></span>${escapeHtml(c.title)}`;
+      listEl.appendChild(li);
+    });
+  }
+}
+
+function renderCockpit() {
+  const container = document.getElementById('ceItems');
+  if (!container) return;
+
+  const all = CaptureStore.getAll();
+  const filtered = all
+    .filter(c => ceFilter === 'all' || c.type === ceFilter)
+    .filter(c => c.status === ceStatus)
+    .sort((a, b) => {
+      const prio = { critical: 0, high: 1, medium: 2, low: 3 };
+      if (prio[a.priority] !== prio[b.priority]) return prio[a.priority] - prio[b.priority];
+      if (a.deadline && !b.deadline) return -1;
+      if (!a.deadline && b.deadline) return 1;
+      if (a.deadline && b.deadline) return new Date(a.deadline) - new Date(b.deadline);
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+  // Update stats
+  const counts = CaptureStore.getCounts();
+  const countAll = document.getElementById('ceCountAll');
+  if (countAll) countAll.textContent = counts.total;
+  const overdueWrap = document.getElementById('ceOverdueWrap');
+  const overdueCount = document.getElementById('ceCountOverdue');
+  if (overdueWrap && overdueCount) {
+    if (counts.overdue > 0) {
+      overdueWrap.style.display = '';
+      overdueCount.textContent = counts.overdue;
+    } else {
+      overdueWrap.style.display = 'none';
+    }
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="ce-empty">Nenhum item ${ceFilter !== 'all' ? 'deste tipo' : ''} ${ceStatus === 'open' ? 'aberto' : ceStatus === 'done' ? 'concluído' : ceStatus === 'in_progress' ? 'em andamento' : 'arquivado'}</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(c => {
+    const color = CaptureStore.TYPE_COLORS[c.type] || '#888';
+    const label = CaptureStore.TYPE_LABELS[c.type] || c.type;
+    const now = new Date();
+    const isOverdue = c.deadline && c.status === 'open' && new Date(c.deadline) < now;
+    const deadlineStr = c.deadline ? new Date(c.deadline).toLocaleDateString('pt-BR') : '';
+    const prioClass = c.priority === 'critical' ? 'ce-prio-critical' : c.priority === 'high' ? 'ce-prio-high' : '';
+
+    return `<div class="ce-card ${prioClass}" data-id="${c.id}" style="border-left-color:${color}">
+      <div class="ce-card-header">
+        <span class="ce-card-badge" style="background:${color}">${label}</span>
+        ${c.priority === 'critical' ? '<span class="ce-card-prio">URGENTE</span>' : ''}
+        ${c.priority === 'high' ? '<span class="ce-card-prio ce-card-prio-high">ALTA</span>' : ''}
+        ${deadlineStr ? `<span class="ce-card-deadline ${isOverdue ? 'ce-overdue' : ''}">${isOverdue ? '⚠ ' : ''}${deadlineStr}</span>` : ''}
+      </div>
+      <div class="ce-card-title">${escapeHtml(c.title)}</div>
+      ${c.body ? `<div class="ce-card-body">${escapeHtml(c.body).substring(0, 150)}</div>` : ''}
+      ${c.tags && c.tags.length ? `<div class="ce-card-tags">${c.tags.map(t => `<span class="ce-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      <div class="ce-card-actions">
+        ${c.status === 'open' ? `<button class="ce-action" data-action="in_progress" data-id="${c.id}">Iniciar</button>` : ''}
+        ${c.status === 'open' || c.status === 'in_progress' ? `<button class="ce-action ce-action-done" data-action="done" data-id="${c.id}">Concluir</button>` : ''}
+        ${c.status !== 'archived' ? `<button class="ce-action ce-action-archive" data-action="archived" data-id="${c.id}">Arquivar</button>` : ''}
+        ${c.status === 'archived' || c.status === 'done' ? `<button class="ce-action" data-action="open" data-id="${c.id}">Reabrir</button>` : ''}
+        <button class="ce-action ce-action-delete" data-action="delete" data-id="${c.id}">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Attach actions
+  container.querySelectorAll('.ce-action').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+      if (action === 'delete') {
+        CaptureStore.delete(id);
+      } else {
+        CaptureStore.updateStatus(id, action);
+      }
+      renderCockpit();
+      loadDashCaptures();
+    });
+  });
+}
+
+// Wire cockpit navigation
+(function initCockpit() {
+  const navBtn = document.getElementById('navCockpit');
+  const backBtn = document.getElementById('ceBackBtn');
+  const filters = document.getElementById('ceFilters');
+  const statusTabs = document.getElementById('ceStatusTabs');
+
+  if (navBtn) {
+    navBtn.addEventListener('click', () => {
+      setAppMode('cockpit');
+    });
+  }
+
+  if (backBtn) {
+    backBtn.addEventListener('click', () => {
+      setAppMode('home');
+    });
+  }
+
+  if (filters) {
+    filters.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ce-filter');
+      if (!btn) return;
+      filters.querySelectorAll('.ce-filter').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      ceFilter = btn.dataset.filter;
+      renderCockpit();
+    });
+  }
+
+  if (statusTabs) {
+    statusTabs.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ce-status-tab');
+      if (!btn) return;
+      statusTabs.querySelectorAll('.ce-status-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      ceStatus = btn.dataset.status;
+      renderCockpit();
+    });
+  }
+})();
 
 // Public functions to add tasks/notes from SENNA conversation
 function addSennaTask(text) {

@@ -705,6 +705,68 @@ async function getMemoryHealth(env) {
   }
 }
 
+// ===== STRATEGIC CAPTURE CLASSIFIER =====
+const CAPTURE_PROMPT = `You are a strategic capture engine for SENNA, an AI assistant for an entrepreneur. Analyze the USER messages in this conversation and extract ACTIONABLE strategic items.
+
+TYPES:
+- idea: creative concepts, business ideas, product ideas, content ideas
+- task: concrete actions ("preciso fazer X", "temos que Y", "comprar Z")
+- goal: objectives, OKRs, targets ("quero atingir X", "meta de Y")
+- strategy: plans, approaches, methodologies ("a estratégia é X", "vamos fazer Y")
+- schedule: calendar items, meetings, time-bound events ("reunião dia X", "lançar em Y")
+- insight: realizations, learnings, observations ("descobri que X", "percebi que Y")
+
+RULES:
+- Return a JSON array. If nothing strategic, return []
+- Each item: { "type": "...", "title": "short PT-BR summary max 100 chars", "body": "full context in PT-BR", "priority": "low|medium|high|critical", "deadline": "YYYY-MM-DD or null", "tags": ["tag1","tag2"] }
+- ONLY extract from USER messages, NEVER from assistant responses
+- title must be actionable: "Comprar teleprompter" not "Sobre compra de equipamento"
+- Infer priority: "urgente"/"preciso agora" = critical, "importante" = high, "algum dia"/"talvez" = low, default = medium
+- Infer deadlines from temporal cues: "até sexta" = calculate date, "esse mês" = end of month, "semana que vem" = next Monday. Use today's date for reference: ${new Date().toISOString().split('T')[0]}
+- Maximum 5 captures per extraction
+- Skip: greetings, small talk, questions without strategic content, confirmations
+- Minimum: user message must contain strategic/actionable content (>20 chars)`;
+
+async function classifyStrategicCaptures(messages, env) {
+  const recent = messages.filter(m => m.role !== 'system').slice(-10);
+  if (recent.length < 1) return [];
+
+  const userMessages = recent.filter(m => m.role === 'user');
+  if (userMessages.length === 0) return [];
+
+  // Skip if all user messages are short (greetings)
+  const totalUserChars = userMessages.reduce((sum, m) => sum + m.content.length, 0);
+  if (totalUserChars < 20) return [];
+
+  const messagesText = recent
+    .map(m => `${m.role.toUpperCase()}: ${m.content}`)
+    .join('\n\n');
+
+  try {
+    const { routeMessage } = require('./llm-router');
+    const result = await routeMessage([
+      { role: 'system', content: CAPTURE_PROMPT },
+      { role: 'user', content: messagesText }
+    ], env, {
+      forceProvider: 'grok',
+      forceModel: 'grok-3-mini-fast'
+    });
+
+    const raw = result.content || '[]';
+    const parsed = JSON.parse(
+      raw.replace(/```json?\n?/g, '').replace(/```/g, '').trim()
+    );
+
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(c => c && c.title && c.title.length >= 5 && c.type)
+      .slice(0, 5);
+  } catch (err) {
+    console.error('[CAPTURE] Classification failed:', err.message);
+    return [];
+  }
+}
+
 module.exports = {
   processConversationMemory,
   ingestBusinessEvent,
@@ -719,5 +781,6 @@ module.exports = {
   getMemoryHealth,
   extractFacts,
   resolveMemoryAction,
-  memoryQueue
+  memoryQueue,
+  classifyStrategicCaptures
 };

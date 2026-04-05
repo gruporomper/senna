@@ -296,7 +296,15 @@ http.createServer(async (req, res) => {
               budgetWarning: budget.warning || null
             }
           })}\n\n`);
-          res.end();
+
+          // Classify strategic captures before closing stream
+          memory.classifyStrategicCaptures(messages, process.env).then(captures => {
+            if (captures && captures.length > 0) {
+              try { res.write(`data: ${JSON.stringify({ captures })}\n\n`); } catch {}
+              console.log(`[CAPTURE] Classified ${captures.length} strategic items`);
+            }
+            res.end();
+          }).catch(() => res.end());
 
           // Async: log cost + extract memories
           logCostToSupabase(result).catch(err => console.error('[COST] Failed:', err.message));
