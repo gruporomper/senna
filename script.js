@@ -18,13 +18,14 @@ async function initSupabase() {
     if (session?.user) {
       currentUserId = session.user.id;
       console.log('[SUPABASE] Authenticated:', currentUserId);
-      // Sync localStorage to Supabase in background
+      // Sync captures from Supabase (server is source of truth)
+      syncCapturesFromSupabase();
       syncLocalToSupabase();
     }
     // Listen for auth changes
     supabaseClient.auth.onAuthStateChange((event, session) => {
       currentUserId = session?.user?.id || null;
-      if (event === 'SIGNED_IN') syncLocalToSupabase();
+      if (event === 'SIGNED_IN') { syncCapturesFromSupabase(); syncLocalToSupabase(); }
     });
   } catch (err) {
     console.error('[SUPABASE] Init failed:', err.message);
@@ -738,6 +739,41 @@ async function syncLocalToSupabase() {
   }
 
   console.log('[SYNC] Complete');
+}
+
+// Sync captures FROM Supabase TO localStorage (server is source of truth)
+async function syncCapturesFromSupabase() {
+  if (!supabaseClient || !currentUserId) return;
+  try {
+    const { data, error } = await supabaseClient
+      .from('senna_captures')
+      .select('*')
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: false });
+    if (error) { console.error('[SYNC] Captures pull error:', error.message); return; }
+    if (!data || data.length === 0) return;
+
+    // Convert Supabase rows to CaptureStore format
+    const captures = data.map(row => ({
+      id: row.id,
+      type: row.type,
+      title: row.title,
+      body: row.body || '',
+      status: row.status || 'open',
+      priority: row.priority || 'medium',
+      deadline: row.deadline || null,
+      tags: row.tags || [],
+      sourceSessionId: row.source_session_id || null,
+      sourceMode: row.source_mode || 'box',
+      parentId: row.parent_id || null,
+      progress: row.progress || 0,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at || row.created_at
+    }));
+    localStorage.setItem('senna_captures', JSON.stringify(captures));
+    console.log(`[SYNC] ${captures.length} captures pulled from Supabase`);
+    loadDashCaptures();
+  } catch (e) { console.error('[SYNC] Captures pull failed:', e); }
 }
 
 // Model prefix commands (parsed client-side for UI, actual routing is server-side)
@@ -5210,9 +5246,16 @@ function initDashboard() {
   loadDashCaptures();
   renderQuickActions();
 
-  // Dashboard cockpit widget click → open cockpit
+  loadDashRadar();
+  loadDashDiscoveries();
+
+  // Dashboard widget clicks
   const dashCockpit = document.getElementById('dashCockpit');
   if (dashCockpit) dashCockpit.addEventListener('click', () => setAppMode('cockpit'));
+  const dashRadar = document.getElementById('dashRadar');
+  if (dashRadar) dashRadar.addEventListener('click', () => openRadarConfig());
+  const dashDisc = document.getElementById('dashDiscoveries');
+  if (dashDisc) dashDisc.addEventListener('click', () => openDiscoveriesPanel());
 }
 
 function updateDashClock() {
@@ -5895,17 +5938,46 @@ Responda de forma concisa e acionavel. Nao mencione que esta em um "modo" — aj
       });
       msgsEl.appendChild(nextBtn);
     } else {
-      // Final step: offer to save to cockpit
+      // Final step: offer to save to cockpit with full hierarchy
       const saveBtn = document.createElement('button');
       saveBtn.className = 'pf-save-btn';
       saveBtn.textContent = 'Salvar no Cockpit';
-      saveBtn.addEventListener('click', () => {
-        // Parse the plan from the conversation and save
-        const obj = CaptureStore.add({ type: 'objective', title: state.refinedObjective || state.rawIdea, sourceMode: 'project-flow' });
-        showToast('Projeto salvo no Cockpit!');
-        ProjectFlowManager.clearState();
-        ceFilter = 'all';
-        setAppMode('cockpit');
+      saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Salvando...';
+        try {
+          // Ask LLM to extract structured plan from conversation
+          const extractPrompt = `Analise o planejamento completo abaixo e extraia a estrutura em JSON PURO (sem markdown, sem \`\`\`):
+${state.history.map(h => `${h.role}: ${h.content}`).join('\n')}
+
+Retorne EXATAMENTE neste formato JSON:
+{"objective":"titulo do objetivo","projects":[{"title":"nome do projeto","milestones":[{"title":"nome da etapa","tasks":["tarefa 1","tarefa 2"]}]}]}
+
+Se nao houver projetos claros, crie pelo menos 1 projeto com etapas e tarefas baseado no plano discutido. Nao inclua explicacoes, apenas o JSON.`;
+
+          const extractResult = await callSherlockLLM(extractPrompt);
+          let planData;
+          try {
+            planData = JSON.parse(extractResult.replace(/```json\n?|```/g, '').trim());
+          } catch {
+            // Fallback: save just the objective
+            planData = { objective: state.refinedObjective || state.rawIdea, projects: [] };
+          }
+
+          if (!planData.objective) planData.objective = state.refinedObjective || state.rawIdea;
+          ProjectFlowManager.saveToCaptures(planData);
+          showToast(`Projeto salvo no Cockpit! ${1 + (planData.projects?.length || 0)} itens criados`);
+          ProjectFlowManager.clearState();
+          ceFilter = 'all';
+          setAppMode('cockpit');
+        } catch (err) {
+          console.error('[ProjectFlow] Save error:', err);
+          // Fallback: save just objective
+          CaptureStore.add({ type: 'objective', title: state.refinedObjective || state.rawIdea, sourceMode: 'project-flow' });
+          showToast('Projeto salvo (simplificado)');
+          ProjectFlowManager.clearState();
+          setAppMode('cockpit');
+        }
       });
       msgsEl.appendChild(saveBtn);
     }
@@ -6271,10 +6343,6 @@ function init() {
   if (window.VoiceEngine) {
     window.VoiceEngine.init().catch(err => console.warn('[VoiceEngine] Init failed:', err));
   }
-
-  // Initialize new modules
-  loadDashRadar();
-  loadDashDiscoveries();
 
   // Wire sidebar nav buttons for new modules
   document.getElementById('navProjeto')?.addEventListener('click', () => initProjectFlow());
