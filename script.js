@@ -348,6 +348,290 @@ const CaptureStore = {
   }
 };
 
+// ===== RAPPORT CONFIG =====
+const RapportConfig = {
+  STORAGE_KEY: 'senna_rapport_config',
+  INFERRED_KEY: 'senna_rapport_inferred',
+  DEFAULTS: { formality: 20, verbosity: 30, humor: 'heavy', emojis: false, technicalDepth: 70, swearing: true },
+
+  get() {
+    try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || { ...this.DEFAULTS }; }
+    catch { return { ...this.DEFAULTS }; }
+  },
+  set(config) {
+    config.updatedAt = new Date().toISOString();
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(config));
+  },
+  getInferred() {
+    try { return JSON.parse(localStorage.getItem(this.INFERRED_KEY)) || null; }
+    catch { return null; }
+  },
+  setInferred(data) {
+    data.updatedAt = new Date().toISOString();
+    localStorage.setItem(this.INFERRED_KEY, JSON.stringify(data));
+  },
+
+  buildBlock() {
+    const c = this.get();
+    const formalLabel = c.formality < 30 ? 'casual' : c.formality < 60 ? 'moderada' : 'formal';
+    const verbLabel = c.verbosity < 30 ? 'conciso e direto' : c.verbosity < 60 ? 'equilibrado' : 'detalhado e explicativo';
+    const depthLabel = c.technicalDepth < 30 ? 'simples, sem jargao' : c.technicalDepth < 60 ? 'moderada' : 'alta, pode usar termos tecnicos';
+    const humorMap = { off: 'sem humor, serio', light: 'leve, piadas sutis', heavy: 'pesado — pode zoar, ser sarcastico, humor negro' };
+    let block = `ESTILO DE COMUNICACAO (configurado pelo usuario):\n`;
+    block += `- Formalidade: ${formalLabel} (${c.formality}/100)\n`;
+    block += `- Densidade: ${verbLabel} (${c.verbosity}/100)\n`;
+    block += `- Humor: ${humorMap[c.humor] || humorMap.heavy}\n`;
+    block += `- Profundidade tecnica: ${depthLabel} (${c.technicalDepth}/100)\n`;
+    block += `- Emojis: ${c.emojis ? 'pode usar' : 'nao usar'}\n`;
+    block += `- Palavrao: ${c.swearing ? 'liberado' : 'evitar'}\n`;
+    block += `Adapte TODAS as respostas a este estilo. Nao mencione estas configuracoes ao usuario.`;
+    return block;
+  },
+
+  // Analyze user message patterns for implicit inference (called every 15 msgs)
+  analyzePatterns(messages) {
+    const userMsgs = messages.filter(m => m.role === 'user').slice(-30);
+    if (userMsgs.length < 10) return;
+    const avgLen = userMsgs.reduce((s, m) => s + m.content.length, 0) / userMsgs.length;
+    const emojiCount = userMsgs.reduce((s, m) => s + (m.content.match(/[\u{1F600}-\u{1F9FF}]/gu) || []).length, 0);
+    const formalMarkers = userMsgs.reduce((s, m) => s + (m.content.match(/\b(por favor|obrigado|prezado|senhor|cordialmente)\b/gi) || []).length, 0);
+    this.setInferred({
+      avgMessageLength: Math.round(avgLen),
+      formalityScore: Math.min(1, formalMarkers / userMsgs.length),
+      emojiFrequency: emojiCount / userMsgs.length,
+      samplesAnalyzed: userMsgs.length
+    });
+  }
+};
+
+// ===== SELF PROFILE MANAGER =====
+const SelfProfileManager = {
+  CATEGORIES: ['objectives', 'preferences', 'communication', 'habits', 'constraints'],
+  CAT_LABELS: { objectives: 'Objetivos', preferences: 'Preferencias', communication: 'Comunicacao', habits: 'Habitos', constraints: 'Restricoes' },
+  CAT_ICONS: { objectives: '🎯', preferences: '⚙️', communication: '💬', habits: '🔄', constraints: '🚧' },
+  CAT_QUESTIONS: {
+    objectives: ['Quais sao seus principais objetivos profissionais para os proximos 6 meses?', 'E na vida pessoal, o que voce quer conquistar?', 'Qual e o objetivo mais ambicioso que voce tem hoje?'],
+    preferences: ['Que tipo de conteudo te interessa mais? (tecnologia, negocios, arte, esportes...)', 'Quais sao seus restaurantes ou culinarias favoritas?', 'O que voce gosta de fazer no tempo livre?'],
+    communication: ['Voce prefere respostas curtas e diretas ou detalhadas?', 'Gosta quando uso humor nas respostas ou prefere algo mais serio?', 'Prefere que eu pergunte antes de agir ou que tome iniciativa?'],
+    habits: ['Como e sua rotina matinal tipica?', 'Voce trabalha melhor de manha ou de noite?', 'Com que frequencia viaja?'],
+    constraints: ['Qual seu orcamento mensal tipico para investimentos/projetos?', 'Quais sao suas restricoes de tempo mais criticas?', 'Ha alguma limitacao que devo sempre considerar?']
+  },
+
+  getProfile() {
+    const memories = MemoryBank.getAll();
+    const profile = {};
+    this.CATEGORIES.forEach(cat => {
+      profile[cat] = memories.filter(m =>
+        m.tags && m.tags.some(t => t === `profile:${cat}`)
+      );
+    });
+    return profile;
+  },
+
+  getSummary() {
+    const memories = MemoryBank.getAll().filter(m => m.tags && m.tags.some(t => t.startsWith('profile:')));
+    if (memories.length === 0) return '';
+    let summary = '';
+    this.CATEGORIES.forEach(cat => {
+      const catMems = memories.filter(m => m.tags.includes(`profile:${cat}`));
+      if (catMems.length > 0) {
+        summary += `${this.CAT_LABELS[cat]}: ${catMems.map(m => m.summary).join('; ')}\n`;
+      }
+    });
+    return summary;
+  },
+
+  async processAnswer(category, answer) {
+    const memory = {
+      id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      summary: answer.slice(0, 300),
+      insights: [],
+      decisions: [],
+      todos: [],
+      tags: [`profile:${category}`],
+      createdAt: new Date().toISOString(),
+      sourceTitle: `Perfil: ${this.CAT_LABELS[category]}`
+    };
+    MemoryBank.add(memory);
+    // Also save to server memory if available
+    try {
+      await fetch('/api/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: currentUserId, type: 'profile', key: `profile_${category}`, content: answer.slice(0, 300), confidence: 0.9, privacy_level: 'internal' })
+      });
+    } catch (e) { console.warn('[SelfProfile] Server save failed:', e); }
+  }
+};
+
+// ===== PROJECT FLOW MANAGER =====
+const ProjectFlowManager = {
+  STORAGE_KEY: 'senna_project_flow_state',
+  STEPS: [
+    { id: 'capture', label: 'Captura', prompt: 'O usuario quer planejar algo. Pergunte com curiosidade: "Qual a sua ideia ou objetivo, Senhor?" e faca 1-2 perguntas para entender melhor. Seja breve.' },
+    { id: 'refine', label: 'Refinamento', prompt: 'Com base na ideia do usuario, reformule como um objetivo SMART claro e conciso (1-2 frases). Pergunte: "Esse objetivo te parece certo?" Seja direto.' },
+    { id: 'context', label: 'Contexto', prompt: 'Pergunte sobre restricoes praticas: orcamento, prazo, recursos disponiveis, dependencias. Maximo 3 perguntas diretas. Seja objetivo.' },
+    { id: 'macro', label: 'Plano Macro', prompt: 'Com base no objetivo e contexto, proponha 3-5 projetos/areas de trabalho necessarios. Liste cada um com titulo e 1 frase de descricao. Pergunte se o usuario quer ajustar.' },
+    { id: 'milestones', label: 'Etapas', prompt: 'Para cada projeto proposto, sugira 2-4 etapas/marcos concretos. Liste em formato hierarquico. Pergunte se faz sentido.' },
+    { id: 'tasks', label: 'Tarefas', prompt: 'Para as etapas prioritarias, sugira tarefas concretas e acionaveis. Cada tarefa deve ser algo que uma pessoa pode fazer em horas ou poucos dias. Liste de forma clara.' },
+    { id: 'summary', label: 'Resumo', prompt: 'Faca um resumo executivo do plano completo: objetivo, projetos, etapas e tarefas prioritarias. Proponha os 3 proximos passos imediatos. Pergunte: "Quer que eu salve tudo no Cockpit?"' }
+  ],
+
+  getState() {
+    try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY)); } catch { return null; }
+  },
+  setState(state) {
+    state.updatedAt = new Date().toISOString();
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(state));
+  },
+  clearState() { localStorage.removeItem(this.STORAGE_KEY); },
+
+  createState(rawIdea) {
+    const state = {
+      id: 'pf_' + Date.now(),
+      currentStep: 0,
+      rawIdea,
+      refinedObjective: '',
+      context: {},
+      objectiveId: null,
+      projectIds: [],
+      milestoneIds: [],
+      taskIds: [],
+      history: [],
+      createdAt: new Date().toISOString()
+    };
+    this.setState(state);
+    return state;
+  },
+
+  nextStep() {
+    const state = this.getState();
+    if (!state || state.currentStep >= this.STEPS.length - 1) return null;
+    state.currentStep++;
+    this.setState(state);
+    return state;
+  },
+
+  getCurrentPrompt() {
+    const state = this.getState();
+    if (!state) return null;
+    const step = this.STEPS[state.currentStep];
+    let prompt = step.prompt;
+    if (state.currentStep > 0 && state.refinedObjective) {
+      prompt = `Contexto do projeto: Objetivo="${state.refinedObjective}". ` + prompt;
+    }
+    return prompt;
+  },
+
+  // Save all captures from the completed flow to CaptureStore
+  saveToCaptures(planData) {
+    // planData = { objective: string, projects: [{title, milestones: [{title, tasks: [string]}]}] }
+    const obj = CaptureStore.add({ type: 'objective', title: planData.objective, sourceMode: 'project-flow' });
+    const state = this.getState() || {};
+    state.objectiveId = obj.id;
+    state.projectIds = [];
+    state.milestoneIds = [];
+    state.taskIds = [];
+
+    (planData.projects || []).forEach(proj => {
+      const p = CaptureStore.add({ type: 'project', title: proj.title, parentId: obj.id, sourceMode: 'project-flow' });
+      state.projectIds.push(p.id);
+      (proj.milestones || []).forEach(ms => {
+        const m = CaptureStore.add({ type: 'milestone', title: ms.title, parentId: p.id, sourceMode: 'project-flow' });
+        state.milestoneIds.push(m.id);
+        (ms.tasks || []).forEach(taskTitle => {
+          const t = CaptureStore.add({ type: 'task', title: taskTitle, parentId: m.id, sourceMode: 'project-flow' });
+          state.taskIds.push(t.id);
+        });
+      });
+    });
+    this.setState(state);
+    loadDashCaptures();
+    return obj;
+  }
+};
+
+// ===== SHERLOCK ENGINE =====
+const SherlockEngine = {
+  STORAGE_KEY: 'senna_sherlock_reports',
+  MAX_REPORTS: 10,
+  state: null, // { phase, query, subQuestions, findings, synthesis }
+
+  getReports() {
+    try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || []; } catch { return []; }
+  },
+  saveReport(report) {
+    const reports = this.getReports();
+    reports.unshift(report);
+    if (reports.length > this.MAX_REPORTS) reports.length = this.MAX_REPORTS;
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(reports));
+  },
+
+  createState(query) {
+    this.state = { phase: 0, query, subQuestions: [], findings: [], synthesis: '', id: 'sh_' + Date.now() };
+    return this.state;
+  },
+
+  PHASE_LABELS: ['Analisando escopo', 'Decompondo em frentes', 'Pesquisando', 'Sintetizando'],
+
+  getPhasePrompt(phase, context) {
+    const prompts = [
+      // Phase 0: Scope expansion
+      `Voce e um pesquisador profundo. O usuario quer investigar: "${context.query}"
+Expanda o escopo da pesquisa: identifique 3-5 subperguntas ou frentes de investigacao que cobrem o tema de forma abrangente.
+Responda APENAS em JSON valido: {"subQuestions": ["pergunta1", "pergunta2", ...]}`,
+      // Phase 1: Research each sub-question
+      `Voce e um pesquisador profundo investigando: "${context.query}"
+Subpergunta atual: "${context.currentQuestion}"
+Pesquise esta subpergunta com profundidade. Traga fatos, dados, perspectivas diferentes e contradicoes se houver.
+Responda APENAS em JSON valido: {"answer": "resposta detalhada", "confidence": 0.8, "keyFacts": ["fato1", "fato2"]}`,
+      // Phase 2: Synthesis
+      `Voce e um pesquisador profundo. Pesquisa original: "${context.query}"
+Achados parciais:
+${(context.findings || []).map((f, i) => `${i + 1}. ${f.question}: ${f.answer}`).join('\n')}
+
+Sintetize tudo em um relatorio completo em markdown. Estruture com secoes claras, destaque contradicoes e incertezas, e conclua com insights acionaveis.
+Nao use JSON — responda direto em markdown.`
+    ];
+    return prompts[Math.min(phase, prompts.length - 1)];
+  }
+};
+
+// ===== RADAR MANAGER (Fase 2 — placeholder) =====
+const RadarManager = {
+  STORAGE_KEY: 'senna_radar_configs',
+  REPORTS_KEY: 'senna_radar_reports',
+  getConfigs() { try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || []; } catch { return []; } },
+  saveConfigs(c) { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(c)); },
+  getReports() { try { return JSON.parse(localStorage.getItem(this.REPORTS_KEY)) || []; } catch { return []; } },
+  addConfig(config) {
+    const configs = this.getConfigs();
+    config.id = config.id || 'radar_' + Date.now();
+    config.createdAt = config.createdAt || new Date().toISOString();
+    config.active = true;
+    configs.push(config);
+    this.saveConfigs(configs);
+    return config;
+  },
+  deleteConfig(id) { this.saveConfigs(this.getConfigs().filter(c => c.id !== id)); },
+  checkDue() {
+    const now = new Date();
+    return this.getConfigs().filter(c => c.active && c.nextRun && new Date(c.nextRun) <= now);
+  }
+};
+
+// ===== DISCOVERY ENGINE (Fase 2 — placeholder) =====
+const DiscoveryEngine = {
+  STORAGE_KEY: 'senna_discoveries',
+  LAST_RUN_KEY: 'senna_discovery_last_run',
+  getAll() { try { return JSON.parse(localStorage.getItem(this.STORAGE_KEY)) || []; } catch { return []; } },
+  shouldRun() {
+    const last = localStorage.getItem(this.LAST_RUN_KEY);
+    if (!last) return true;
+    return (Date.now() - new Date(last).getTime()) > 24 * 60 * 60 * 1000;
+  }
+};
+
 // ===== SENNA SELF-ACTIONS (Function Calling) =====
 const ACTION_HANDLERS = {
   open_cockpit: () => setAppMode('cockpit'),
@@ -358,6 +642,12 @@ const ACTION_HANDLERS = {
   filter_objectives: () => { ceFilter = 'objective'; setAppMode('cockpit'); },
   filter_ideas: () => { ceFilter = 'idea'; setAppMode('cockpit'); },
   filter_projects: () => { ceFilter = 'project'; setAppMode('cockpit'); },
+  open_project: () => initProjectFlow(),
+  open_sherlock: (query) => initSherlock(query),
+  open_radar: () => openRadarConfig(),
+  open_discoveries: () => openDiscoveriesPanel(),
+  open_profile: () => setAppMode('self-profile'),
+  open_rapport: () => openRapportModal(),
 };
 
 function executeActions(text) {
@@ -817,6 +1107,12 @@ Ações disponíveis:
 - [ACTION:create_task:TITULO] — Cria uma tarefa no cockpit
 - [ACTION:create_objective:TITULO] — Cria um objetivo no cockpit
 - [ACTION:create_idea:TITULO] — Cria uma ideia no cockpit
+- [ACTION:open_project] — Abre o Modo Projeto (planejamento guiado)
+- [ACTION:open_sherlock:TEMA] — Abre o Modo Sherlock (pesquisa profunda) sobre um tema
+- [ACTION:open_profile] — Abre o painel de Perfil do usuario
+- [ACTION:open_rapport] — Abre configuracao de estilo/rapport
+- [ACTION:open_radar] — Abre configuracao do Radar
+- [ACTION:open_discoveries] — Abre o painel de Descobertas
 REGRAS:
 - Use APENAS quando o usuário pedir explicitamente ("abre", "mostra", "cria", "vai para", "verifica")
 - Coloque a tag no FINAL da resposta, depois do texto
@@ -1562,6 +1858,14 @@ function buildSystemPrompt() {
       }
     });
   }
+
+  // Rapport style block
+  const rapportBlock = RapportConfig.buildBlock();
+  if (rapportBlock) ctx += '\n\n' + rapportBlock;
+
+  // User profile summary
+  const profileSummary = SelfProfileManager.getSummary();
+  if (profileSummary) ctx += '\n\n## PERFIL DO USUARIO\n' + profileSummary;
 
   return SYSTEM_PROMPT + ctx;
 }
@@ -2398,10 +2702,11 @@ profileMenu.addEventListener('click', (e) => {
 
   switch (action) {
     case 'personalizar':
-      console.log('Personalizar');
+      openRapportModal();
       break;
     case 'perfil':
-      console.log('Perfil');
+      setAppMode('self-profile');
+      renderSelfProfilePanel();
       break;
     case 'configuracoes':
       console.log('Configurações');
@@ -2669,6 +2974,25 @@ function setAppMode(mode) {
     if (cePanel) cePanel.style.display = 'flex';
     renderCockpit();
   }
+
+  // New modes: project-flow, sherlock, self-profile
+  if (mode === 'project-flow' || mode === 'sherlock' || mode === 'self-profile') {
+    perpetualHome.style.display = 'none';
+    cockpit.style.display = 'none';
+    chatArea.style.display = 'none';
+    if (sessionPrechatHero) sessionPrechatHero.style.display = 'none';
+    if (mainStripe) mainStripe.style.display = 'none';
+    const cePanel = document.getElementById('cockpitEstrategico');
+    if (cePanel) cePanel.style.display = 'none';
+  }
+
+  // Show correct panel for new modes
+  const pfPanel = document.getElementById('projectFlowPanel');
+  const shPanel = document.getElementById('sherlockPanel');
+  const spPanel = document.getElementById('selfProfilePanel');
+  if (pfPanel) pfPanel.style.display = mode === 'project-flow' ? 'flex' : 'none';
+  if (shPanel) shPanel.style.display = mode === 'sherlock' ? 'flex' : 'none';
+  if (spPanel) spPanel.style.display = mode === 'self-profile' ? 'flex' : 'none';
 
   // Hide cockpit panel when not in cockpit mode
   if (mode !== 'cockpit') {
@@ -3258,6 +3582,12 @@ async function processCommand(text, fromVoice = false) {
   }
   if (trimmed === '/cockpit') { setAppMode('cockpit'); return; }
   if (trimmed === '/custos' || trimmed === '/costs') { loadCostWidget(); const btn = document.getElementById('costDetailsBtn'); if (btn) btn.click(); return; }
+  if (trimmed === '/projeto') { initProjectFlow(); return; }
+  if (trimmed.startsWith('/sherlock')) { initSherlock(text.slice(9).trim()); return; }
+  if (trimmed === '/radar') { openRadarConfig(); return; }
+  if (trimmed === '/descobertas') { openDiscoveriesPanel(); return; }
+  if (trimmed === '/perfil') { setAppMode('self-profile'); return; }
+  if (trimmed === '/rapport' || trimmed === '/estilo') { openRapportModal(); return; }
 
   // Parse model prefix (/grok, /gemini, /gpt, /claude, /ollama, /turbo)
   const prefix = parseModelPrefix(text);
@@ -5247,6 +5577,624 @@ function addSennaNote(text) {
 }
 
 // ===== VERSION CHECK =====
+// ===== RAPPORT MODAL =====
+function openRapportModal() {
+  document.querySelectorAll('.rapport-modal').forEach(m => m.remove());
+  const config = RapportConfig.get();
+  const modal = document.createElement('div');
+  modal.className = 'rapport-modal';
+  modal.innerHTML = `<div class="rapport-modal-content">
+    <div class="rapport-header"><h3>Estilo de Comunicacao</h3><button class="rapport-close">&times;</button></div>
+    <div class="rapport-field">
+      <label>Formalidade <span class="rapport-val" id="rapFormalVal">${config.formality}</span></label>
+      <div class="rapport-range-labels"><span>Casual</span><span>Formal</span></div>
+      <input type="range" min="0" max="100" value="${config.formality}" id="rapFormal" class="rapport-slider">
+    </div>
+    <div class="rapport-field">
+      <label>Verbosidade <span class="rapport-val" id="rapVerbVal">${config.verbosity}</span></label>
+      <div class="rapport-range-labels"><span>Conciso</span><span>Detalhado</span></div>
+      <input type="range" min="0" max="100" value="${config.verbosity}" id="rapVerb" class="rapport-slider">
+    </div>
+    <div class="rapport-field">
+      <label>Profundidade Tecnica <span class="rapport-val" id="rapDepthVal">${config.technicalDepth}</span></label>
+      <div class="rapport-range-labels"><span>Simples</span><span>Profundo</span></div>
+      <input type="range" min="0" max="100" value="${config.technicalDepth}" id="rapDepth" class="rapport-slider">
+    </div>
+    <div class="rapport-field">
+      <label>Humor</label>
+      <div class="rapport-chips">
+        <button class="rapport-chip ${config.humor === 'off' ? 'active' : ''}" data-val="off">Desligado</button>
+        <button class="rapport-chip ${config.humor === 'light' ? 'active' : ''}" data-val="light">Leve</button>
+        <button class="rapport-chip ${config.humor === 'heavy' ? 'active' : ''}" data-val="heavy">Pesado</button>
+      </div>
+    </div>
+    <div class="rapport-toggles">
+      <label class="rapport-toggle"><input type="checkbox" id="rapEmoji" ${config.emojis ? 'checked' : ''}> Emojis</label>
+      <label class="rapport-toggle"><input type="checkbox" id="rapSwear" ${config.swearing ? 'checked' : ''}> Palavrao liberado</label>
+    </div>
+    <button class="rapport-save" id="rapSave">Salvar</button>
+  </div>`;
+
+  // Slider live values
+  modal.querySelectorAll('.rapport-slider').forEach(s => {
+    s.addEventListener('input', () => {
+      const valEl = modal.querySelector(`#${s.id}Val`);
+      if (valEl) valEl.textContent = s.value;
+    });
+  });
+  // Humor chips
+  modal.querySelectorAll('.rapport-chip').forEach(c => {
+    c.addEventListener('click', () => {
+      modal.querySelectorAll('.rapport-chip').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+    });
+  });
+  // Close
+  modal.querySelector('.rapport-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  // Save
+  modal.querySelector('#rapSave').addEventListener('click', () => {
+    const activeChip = modal.querySelector('.rapport-chip.active');
+    RapportConfig.set({
+      formality: parseInt(modal.querySelector('#rapFormal').value),
+      verbosity: parseInt(modal.querySelector('#rapVerb').value),
+      technicalDepth: parseInt(modal.querySelector('#rapDepth').value),
+      humor: activeChip ? activeChip.dataset.val : 'heavy',
+      emojis: modal.querySelector('#rapEmoji').checked,
+      swearing: modal.querySelector('#rapSwear').checked
+    });
+    // Rebuild system prompts with new rapport
+    conversationHistory[0] = { role: 'system', content: buildSystemPrompt() };
+    perpetualHistory[0] = { role: 'system', content: buildSystemPrompt() };
+    showToast('Estilo atualizado');
+    modal.remove();
+  });
+
+  document.body.appendChild(modal);
+}
+
+// ===== SELF PROFILE PANEL =====
+function renderSelfProfilePanel() {
+  const panel = document.getElementById('selfProfilePanel');
+  if (!panel) return;
+  const profile = SelfProfileManager.getProfile();
+
+  let html = `<div class="sp-header">
+    <h2 class="sp-title">PERFIL</h2>
+    <button class="sp-back-btn" id="spBackBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+  </div>
+  <div class="sp-cards">`;
+
+  SelfProfileManager.CATEGORIES.forEach(cat => {
+    const items = profile[cat] || [];
+    const pct = items.length > 0 ? Math.min(100, items.length * 33) : 0;
+    html += `<div class="sp-card" data-cat="${cat}">
+      <div class="sp-card-header">
+        <span class="sp-card-icon">${SelfProfileManager.CAT_ICONS[cat]}</span>
+        <span class="sp-card-title">${SelfProfileManager.CAT_LABELS[cat]}</span>
+        <span class="sp-card-pct">${pct}%</span>
+      </div>
+      <div class="sp-card-body">
+        ${items.length > 0 ? items.map(m => `<p class="sp-item">${escapeHtml(m.summary)}</p>`).join('') : '<p class="sp-empty">Nenhuma informacao ainda</p>'}
+      </div>
+      <button class="sp-update-btn" data-cat="${cat}">${items.length > 0 ? 'Atualizar' : 'Preencher'}</button>
+    </div>`;
+  });
+
+  html += `</div>`;
+  panel.innerHTML = html;
+
+  // Back button
+  panel.querySelector('#spBackBtn')?.addEventListener('click', () => setAppMode('home'));
+
+  // Update buttons — start interview for that category
+  panel.querySelectorAll('.sp-update-btn').forEach(btn => {
+    btn.addEventListener('click', () => startProfileInterview(btn.dataset.cat));
+  });
+}
+
+async function startProfileInterview(category) {
+  const questions = SelfProfileManager.CAT_QUESTIONS[category];
+  if (!questions || questions.length === 0) return;
+
+  // Switch to home mode and start a focused conversation
+  setAppMode('home');
+  const catLabel = SelfProfileManager.CAT_LABELS[category];
+  showToast(`Iniciando entrevista: ${catLabel}`);
+
+  // Build a specialized prompt for the interview
+  const interviewPrompt = `Voce esta no modo PERFIL DO USUARIO, categoria "${catLabel}".
+Seu objetivo e conhecer melhor o Senhor Marlon nesta area.
+Faca as seguintes perguntas, UMA POR VEZ, de forma natural e conversacional:
+${questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+Comece com a primeira pergunta. Seja direto e amigavel.
+Quando o usuario responder cada pergunta, agradeca brevemente e faca a proxima.
+Apos a ultima resposta, diga: "Perfil atualizado, Senhor. [ACTION:open_profile]"
+
+IMPORTANTE: Salve cada resposta como insight para o perfil do usuario.`;
+
+  // Add interview context to perpetual history
+  perpetualHistory.push({ role: 'system', content: interviewPrompt });
+
+  // Trigger the first question
+  const msgElement = addPerpetualMessage('', 'assistant');
+  const response = await callGrokAPIStream(`Inicie a entrevista de perfil na categoria ${catLabel}`, msgElement);
+  const cleanResponse = executeActions(response);
+  const contentEl = msgElement.querySelector('.msg-content');
+  if (contentEl && cleanResponse !== response) contentEl.innerHTML = formatMessage(cleanResponse, 'assistant');
+  msgElement.dataset.rawText = cleanResponse;
+}
+
+// ===== PROJECT FLOW PANEL =====
+function initProjectFlow(initialIdea) {
+  ProjectFlowManager.clearState();
+  if (initialIdea) {
+    ProjectFlowManager.createState(initialIdea);
+  } else {
+    ProjectFlowManager.createState('');
+  }
+  setAppMode('project-flow');
+  renderProjectFlowPanel();
+}
+
+function renderProjectFlowPanel() {
+  const panel = document.getElementById('projectFlowPanel');
+  if (!panel) return;
+  const state = ProjectFlowManager.getState();
+  const currentStep = state ? state.currentStep : 0;
+
+  let stepsHtml = ProjectFlowManager.STEPS.map((step, i) => {
+    const status = i < currentStep ? 'done' : i === currentStep ? 'active' : 'pending';
+    return `<div class="pf-step ${status}" data-step="${i}">
+      <div class="pf-step-dot">${i < currentStep ? '&#10003;' : i + 1}</div>
+      <span class="pf-step-label">${step.label}</span>
+    </div>`;
+  }).join('');
+
+  panel.innerHTML = `<div class="pf-layout">
+    <div class="pf-sidebar">
+      <div class="pf-sidebar-header">
+        <h3>MODO PROJETO</h3>
+        <button class="pf-back-btn" id="pfBackBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      </div>
+      <div class="pf-stepper">${stepsHtml}</div>
+    </div>
+    <div class="pf-main">
+      <div class="pf-messages" id="pfMessages"></div>
+      <div class="pf-input-row">
+        <input type="text" class="pf-input" id="pfInput" placeholder="Sua resposta...">
+        <button class="pf-send" id="pfSend">Enviar</button>
+        <button class="pf-skip" id="pfSkip">Pular</button>
+      </div>
+    </div>
+  </div>`;
+
+  // Back
+  panel.querySelector('#pfBackBtn')?.addEventListener('click', () => {
+    ProjectFlowManager.clearState();
+    setAppMode('home');
+  });
+
+  // Send
+  const pfInput = panel.querySelector('#pfInput');
+  const pfSend = panel.querySelector('#pfSend');
+  const pfSkip = panel.querySelector('#pfSkip');
+
+  const handlePfSend = async () => {
+    const text = pfInput.value.trim();
+    if (!text) return;
+    pfInput.value = '';
+    await processProjectFlowMessage(text);
+  };
+
+  pfSend?.addEventListener('click', handlePfSend);
+  pfInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') handlePfSend(); });
+  pfSkip?.addEventListener('click', async () => {
+    const state = ProjectFlowManager.nextStep();
+    if (state) {
+      renderProjectFlowPanel();
+      await processProjectFlowMessage('[usuario pulou este passo]');
+    }
+  });
+
+  // Start first step if just created
+  if (state && state.history.length === 0) {
+    processProjectFlowMessage(state.rawIdea || 'Iniciar planejamento');
+  }
+}
+
+async function processProjectFlowMessage(userText) {
+  const panel = document.getElementById('projectFlowPanel');
+  const msgsEl = panel?.querySelector('#pfMessages');
+  if (!msgsEl) return;
+
+  // Show user message
+  const userDiv = document.createElement('div');
+  userDiv.className = 'pf-msg pf-msg-user';
+  userDiv.innerHTML = formatMessage(userText, 'user');
+  msgsEl.appendChild(userDiv);
+
+  // Get current step prompt
+  const state = ProjectFlowManager.getState();
+  if (!state) return;
+  state.history.push({ role: 'user', content: userText });
+
+  const stepPrompt = ProjectFlowManager.getCurrentPrompt();
+  const systemMsg = `Voce esta no MODO PROJETO, passo ${state.currentStep + 1}/7: "${ProjectFlowManager.STEPS[state.currentStep].label}".
+${stepPrompt}
+Historico do planejamento ate agora:
+${state.history.map(h => `${h.role}: ${h.content}`).slice(-6).join('\n')}
+
+Responda de forma concisa e acionavel. Nao mencione que esta em um "modo" — aja naturalmente.`;
+
+  // Show assistant response
+  const assistDiv = document.createElement('div');
+  assistDiv.className = 'pf-msg pf-msg-assistant';
+  const contentEl = document.createElement('div');
+  contentEl.className = 'msg-content';
+  assistDiv.appendChild(contentEl);
+  msgsEl.appendChild(assistDiv);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  // Build temp history for this call
+  const tempHistory = [
+    { role: 'system', content: systemMsg },
+    { role: 'user', content: userText }
+  ];
+
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: tempHistory, stream: true })
+    });
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullContent = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.token) {
+            fullContent += data.token;
+            contentEl.innerHTML = formatMessage(fullContent.replace(/\[ACTION:\w+(?::[^\]]+)?\]/g, ''), 'assistant');
+            msgsEl.scrollTop = msgsEl.scrollHeight;
+          }
+          if (data.done) break;
+        } catch {}
+      }
+    }
+
+    const cleanResponse = executeActions(fullContent);
+    contentEl.innerHTML = formatMessage(cleanResponse, 'assistant');
+    state.history.push({ role: 'assistant', content: cleanResponse });
+
+    // Save state
+    if (state.currentStep === 1 && cleanResponse.length > 20) {
+      state.refinedObjective = cleanResponse.slice(0, 200);
+    }
+    ProjectFlowManager.setState(state);
+
+    // Auto-advance after last step
+    if (state.currentStep < ProjectFlowManager.STEPS.length - 1) {
+      // Add a "next step" button
+      const nextBtn = document.createElement('button');
+      nextBtn.className = 'pf-next-btn';
+      nextBtn.textContent = `Proximo: ${ProjectFlowManager.STEPS[state.currentStep + 1].label}`;
+      nextBtn.addEventListener('click', () => {
+        nextBtn.remove();
+        ProjectFlowManager.nextStep();
+        renderProjectFlowPanel();
+      });
+      msgsEl.appendChild(nextBtn);
+    } else {
+      // Final step: offer to save to cockpit
+      const saveBtn = document.createElement('button');
+      saveBtn.className = 'pf-save-btn';
+      saveBtn.textContent = 'Salvar no Cockpit';
+      saveBtn.addEventListener('click', () => {
+        // Parse the plan from the conversation and save
+        const obj = CaptureStore.add({ type: 'objective', title: state.refinedObjective || state.rawIdea, sourceMode: 'project-flow' });
+        showToast('Projeto salvo no Cockpit!');
+        ProjectFlowManager.clearState();
+        ceFilter = 'all';
+        setAppMode('cockpit');
+      });
+      msgsEl.appendChild(saveBtn);
+    }
+    msgsEl.scrollTop = msgsEl.scrollHeight;
+  } catch (err) {
+    contentEl.innerHTML = formatMessage('Erro ao processar. Tente novamente.', 'assistant');
+    console.error('[ProjectFlow] Error:', err);
+  }
+}
+
+// ===== SHERLOCK PANEL =====
+function initSherlock(query) {
+  if (!query) {
+    // If no query, switch to sherlock mode and show input
+    setAppMode('sherlock');
+    renderSherlockPanel(null);
+    return;
+  }
+  SherlockEngine.createState(query);
+  setAppMode('sherlock');
+  renderSherlockPanel(SherlockEngine.state);
+  runSherlockPipeline(query);
+}
+
+function renderSherlockPanel(state) {
+  const panel = document.getElementById('sherlockPanel');
+  if (!panel) return;
+
+  if (!state) {
+    // Initial state: show input
+    panel.innerHTML = `<div class="sh-layout">
+      <div class="sh-header">
+        <h2 class="sh-title">SHERLOCK</h2>
+        <p class="sh-subtitle">Pesquisa profunda e analise cruzada</p>
+        <button class="sh-back-btn" id="shBackBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+      </div>
+      <div class="sh-input-area">
+        <input type="text" class="sh-input" id="shInput" placeholder="O que voce quer investigar?">
+        <button class="sh-start" id="shStart">Investigar</button>
+      </div>
+      <div class="sh-history">
+        ${SherlockEngine.getReports().slice(0, 5).map(r => `<div class="sh-history-item" data-id="${r.id}"><strong>${escapeHtml(r.query)}</strong><br><small>${new Date(r.createdAt).toLocaleDateString('pt-BR')}</small></div>`).join('')}
+      </div>
+    </div>`;
+
+    panel.querySelector('#shBackBtn')?.addEventListener('click', () => setAppMode('home'));
+    const shInput = panel.querySelector('#shInput');
+    const shStart = panel.querySelector('#shStart');
+    shStart?.addEventListener('click', () => { if (shInput.value.trim()) initSherlock(shInput.value.trim()); });
+    shInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && shInput.value.trim()) initSherlock(shInput.value.trim()); });
+
+    // Click on history items
+    panel.querySelectorAll('.sh-history-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const report = SherlockEngine.getReports().find(r => r.id === item.dataset.id);
+        if (report) renderSherlockReport(report);
+      });
+    });
+    return;
+  }
+
+  // Active research state
+  panel.innerHTML = `<div class="sh-layout">
+    <div class="sh-header">
+      <h2 class="sh-title">SHERLOCK</h2>
+      <button class="sh-back-btn" id="shBackBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+    </div>
+    <div class="sh-query">"${escapeHtml(state.query)}"</div>
+    <div class="sh-phases" id="shPhases">
+      ${SherlockEngine.PHASE_LABELS.map((label, i) => `<div class="sh-phase ${i === state.phase ? 'active' : i < state.phase ? 'done' : ''}" data-phase="${i}">
+        <div class="sh-phase-dot">${i < state.phase ? '&#10003;' : ''}</div>
+        <span>${label}</span>
+      </div>`).join('')}
+    </div>
+    <div class="sh-content" id="shContent"><div class="sh-loading">Analisando...</div></div>
+  </div>`;
+
+  panel.querySelector('#shBackBtn')?.addEventListener('click', () => {
+    SherlockEngine.state = null;
+    setAppMode('home');
+  });
+}
+
+async function runSherlockPipeline(query) {
+  const state = SherlockEngine.state;
+  if (!state) return;
+  const contentEl = document.getElementById('shContent');
+  if (!contentEl) return;
+
+  try {
+    // Phase 0: Scope expansion — get sub-questions
+    state.phase = 0;
+    updateSherlockPhases(state);
+    contentEl.innerHTML = '<div class="sh-loading">Expandindo escopo da pesquisa...</div>';
+
+    const expandPrompt = SherlockEngine.getPhasePrompt(0, { query });
+    const expandResult = await callSherlockLLM(expandPrompt);
+    let subQuestions;
+    try {
+      const parsed = JSON.parse(expandResult.replace(/```json\n?|```/g, '').trim());
+      subQuestions = parsed.subQuestions || [query];
+    } catch { subQuestions = [query]; }
+    state.subQuestions = subQuestions;
+
+    // Show sub-questions
+    contentEl.innerHTML = `<div class="sh-subqs"><h4>Frentes de investigacao:</h4><ol>${subQuestions.map(q => `<li>${escapeHtml(q)}</li>`).join('')}</ol></div><div class="sh-findings" id="shFindings"></div>`;
+
+    // Phase 1: Research each sub-question
+    state.phase = 1;
+    updateSherlockPhases(state);
+    const findingsEl = document.getElementById('shFindings');
+
+    for (let i = 0; i < subQuestions.length; i++) {
+      if (findingsEl) findingsEl.innerHTML += `<div class="sh-finding-loading">Pesquisando: ${escapeHtml(subQuestions[i])}...</div>`;
+
+      const researchPrompt = SherlockEngine.getPhasePrompt(1, { query, currentQuestion: subQuestions[i] });
+      const researchResult = await callSherlockLLM(researchPrompt);
+
+      let finding;
+      try {
+        finding = JSON.parse(researchResult.replace(/```json\n?|```/g, '').trim());
+      } catch { finding = { answer: researchResult, confidence: 0.5, keyFacts: [] }; }
+
+      state.findings.push({ question: subQuestions[i], answer: finding.answer, confidence: finding.confidence || 0.5 });
+
+      // Update display
+      if (findingsEl) {
+        findingsEl.innerHTML = state.findings.map(f =>
+          `<div class="sh-finding"><h5>${escapeHtml(f.question)} <span class="sh-confidence">${Math.round(f.confidence * 100)}%</span></h5><div class="sh-finding-text">${formatMessage(f.answer, 'assistant')}</div></div>`
+        ).join('');
+      }
+    }
+
+    // Phase 2: Synthesis
+    state.phase = 2;
+    updateSherlockPhases(state);
+    contentEl.querySelector('.sh-findings')?.insertAdjacentHTML('afterend', '<div class="sh-loading" id="shSynthLoading">Sintetizando resultados...</div>');
+
+    const synthPrompt = SherlockEngine.getPhasePrompt(2, { query, findings: state.findings });
+    const synthesis = await callSherlockLLM(synthPrompt);
+    state.synthesis = synthesis;
+    state.phase = 3;
+
+    // Save report
+    const report = {
+      id: state.id,
+      query: state.query,
+      subQuestions: state.subQuestions,
+      findings: state.findings,
+      synthesis: state.synthesis,
+      createdAt: new Date().toISOString()
+    };
+    SherlockEngine.saveReport(report);
+
+    // Render final report
+    renderSherlockReport(report);
+
+  } catch (err) {
+    contentEl.innerHTML = `<div class="sh-error">Erro na pesquisa: ${err.message}. Tente novamente.</div>`;
+    console.error('[Sherlock] Pipeline error:', err);
+  }
+}
+
+function updateSherlockPhases(state) {
+  const phases = document.querySelectorAll('#shPhases .sh-phase');
+  phases.forEach((el, i) => {
+    el.className = `sh-phase ${i === state.phase ? 'active' : i < state.phase ? 'done' : ''}`;
+    if (i < state.phase) el.querySelector('.sh-phase-dot').innerHTML = '&#10003;';
+  });
+}
+
+function renderSherlockReport(report) {
+  const panel = document.getElementById('sherlockPanel');
+  if (!panel) return;
+
+  panel.innerHTML = `<div class="sh-layout">
+    <div class="sh-header">
+      <h2 class="sh-title">SHERLOCK — Relatorio</h2>
+      <button class="sh-back-btn" id="shBackBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
+    </div>
+    <div class="sh-query">"${escapeHtml(report.query)}"</div>
+    <div class="sh-report">${formatMessage(report.synthesis, 'assistant')}</div>
+    <div class="sh-report-actions">
+      <button class="sh-action-btn" id="shSaveNote">Salvar como nota</button>
+      <button class="sh-action-btn" id="shCreateTask">Criar tarefa</button>
+      <button class="sh-action-btn" id="shNewSearch">Nova pesquisa</button>
+    </div>
+  </div>`;
+
+  panel.querySelector('#shBackBtn')?.addEventListener('click', () => { SherlockEngine.state = null; setAppMode('home'); });
+  panel.querySelector('#shSaveNote')?.addEventListener('click', async () => {
+    const notes = JSON.parse(localStorage.getItem('senna_notes') || '[]');
+    notes.unshift({ text: `[Sherlock] ${report.query}\n\n${report.synthesis}`, date: new Date().toISOString(), id: 'note_' + Date.now(), source: 'sherlock' });
+    localStorage.setItem('senna_notes', JSON.stringify(notes));
+    showToast('Relatorio salvo como nota');
+  });
+  panel.querySelector('#shCreateTask')?.addEventListener('click', () => {
+    CaptureStore.add({ type: 'task', title: `Pesquisa: ${report.query}`, body: report.synthesis.slice(0, 500), sourceMode: 'sherlock' });
+    showToast('Tarefa criada no Cockpit');
+    loadDashCaptures();
+  });
+  panel.querySelector('#shNewSearch')?.addEventListener('click', () => {
+    SherlockEngine.state = null;
+    renderSherlockPanel(null);
+  });
+}
+
+async function callSherlockLLM(prompt) {
+  const response = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messages: [{ role: 'system', content: 'Voce e um pesquisador profundo e analitico. Responda exatamente no formato solicitado.' }, { role: 'user', content: prompt }],
+      stream: false,
+      forceProvider: 'openai'
+    })
+  });
+  const data = await response.json();
+  return data.content || data.choices?.[0]?.message?.content || '';
+}
+
+// ===== RADAR CONFIG (placeholder — Fase 2) =====
+function openRadarConfig() {
+  document.querySelectorAll('.radar-modal').forEach(m => m.remove());
+  const configs = RadarManager.getConfigs();
+  const modal = document.createElement('div');
+  modal.className = 'radar-modal rapport-modal';
+  modal.innerHTML = `<div class="rapport-modal-content">
+    <div class="rapport-header"><h3>Radar — Monitoramento</h3><button class="rapport-close">&times;</button></div>
+    <p style="color:var(--text-dim);margin-bottom:12px">Configure topicos para monitoramento periodico.</p>
+    <div class="radar-list" id="radarList">
+      ${configs.length > 0 ? configs.map(c => `<div class="radar-item"><strong>${escapeHtml(c.topic)}</strong> — ${c.frequency}<button class="radar-delete" data-id="${c.id}">&times;</button></div>`).join('') : '<p style="color:var(--text-dim)">Nenhum radar configurado</p>'}
+    </div>
+    <div style="margin-top:12px">
+      <input type="text" class="pf-input" id="radarTopic" placeholder="Topico (ex: Inteligencia Artificial)">
+      <select class="pf-input" id="radarFreq" style="margin-top:6px"><option value="weekly">Semanal</option><option value="biweekly">Quinzenal</option><option value="monthly">Mensal</option></select>
+      <button class="rapport-save" id="radarAdd" style="margin-top:8px">Adicionar</button>
+    </div>
+    <p style="color:var(--text-dim);font-size:11px;margin-top:12px">Execucao automatica sera ativada na Fase 2 com web search.</p>
+  </div>`;
+
+  modal.querySelector('.rapport-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  modal.querySelectorAll('.radar-delete').forEach(btn => {
+    btn.addEventListener('click', () => { RadarManager.deleteConfig(btn.dataset.id); openRadarConfig(); });
+  });
+  modal.querySelector('#radarAdd')?.addEventListener('click', () => {
+    const topic = modal.querySelector('#radarTopic').value.trim();
+    const freq = modal.querySelector('#radarFreq').value;
+    if (!topic) return;
+    const freqDays = { weekly: 7, biweekly: 14, monthly: 30 };
+    const nextRun = new Date(Date.now() + freqDays[freq] * 86400000).toISOString();
+    RadarManager.addConfig({ topic, frequency: freq, nextRun, keywords: [] });
+    showToast(`Radar adicionado: ${topic}`);
+    openRadarConfig();
+  });
+
+  document.body.appendChild(modal);
+}
+
+// ===== DISCOVERIES PANEL (placeholder — Fase 2) =====
+function openDiscoveriesPanel() {
+  const discoveries = DiscoveryEngine.getAll();
+  document.querySelectorAll('.disc-modal').forEach(m => m.remove());
+  const modal = document.createElement('div');
+  modal.className = 'disc-modal rapport-modal';
+  modal.innerHTML = `<div class="rapport-modal-content">
+    <div class="rapport-header"><h3>Descobertas</h3><button class="rapport-close">&times;</button></div>
+    <p style="color:var(--text-dim);margin-bottom:12px">Oportunidades personalizadas baseadas no seu perfil.</p>
+    ${discoveries.length > 0
+      ? discoveries.map(d => `<div class="disc-item"><strong>${escapeHtml(d.title)}</strong><p>${escapeHtml(d.description)}</p><small>${d.reason}</small></div>`).join('')
+      : '<p style="color:var(--text-dim)">Nenhuma descoberta ainda. Preencha seu Perfil e ative na Fase 2.</p>'}
+  </div>`;
+  modal.querySelector('.rapport-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+// ===== DASHBOARD WIDGETS: Radar + Discoveries =====
+function loadDashRadar() {
+  const el = document.getElementById('dashRadarCount');
+  if (el) el.textContent = RadarManager.getConfigs().filter(c => c.active).length;
+}
+
+function loadDashDiscoveries() {
+  const el = document.getElementById('dashDiscCount');
+  if (el) el.textContent = DiscoveryEngine.getAll().filter(d => d.status === 'new').length;
+}
+
 async function checkVersion() {
   const badge = document.getElementById('versionBadge');
   const text = document.getElementById('versionText');
@@ -5323,6 +6271,15 @@ function init() {
   if (window.VoiceEngine) {
     window.VoiceEngine.init().catch(err => console.warn('[VoiceEngine] Init failed:', err));
   }
+
+  // Initialize new modules
+  loadDashRadar();
+  loadDashDiscoveries();
+
+  // Wire sidebar nav buttons for new modules
+  document.getElementById('navProjeto')?.addEventListener('click', () => initProjectFlow());
+  document.getElementById('navSherlock')?.addEventListener('click', () => initSherlock());
+  document.getElementById('navRadar')?.addEventListener('click', () => openRadarConfig());
 }
 
 init();
