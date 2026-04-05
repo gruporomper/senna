@@ -348,6 +348,46 @@ const CaptureStore = {
   }
 };
 
+// ===== SENNA SELF-ACTIONS (Function Calling) =====
+const ACTION_HANDLERS = {
+  open_cockpit: () => setAppMode('cockpit'),
+  open_session: () => openSession(),
+  go_home: () => setAppMode('home'),
+  show_costs: () => { loadCostWidget(); const btn = document.getElementById('costDetailsBtn'); if (btn) btn.click(); },
+  filter_tasks: () => { ceFilter = 'task'; setAppMode('cockpit'); },
+  filter_objectives: () => { ceFilter = 'objective'; setAppMode('cockpit'); },
+  filter_ideas: () => { ceFilter = 'idea'; setAppMode('cockpit'); },
+  filter_projects: () => { ceFilter = 'project'; setAppMode('cockpit'); },
+};
+
+function executeActions(text) {
+  const actionRegex = /\[ACTION:(\w+)(?::([^\]]+))?\]/g;
+  const actions = [];
+  let match;
+  while ((match = actionRegex.exec(text)) !== null) {
+    actions.push({ name: match[1], param: match[2] || null });
+  }
+  const cleanText = text.replace(actionRegex, '').trim();
+
+  if (actions.length > 0) {
+    setTimeout(() => {
+      actions.forEach(action => {
+        if (ACTION_HANDLERS[action.name]) {
+          ACTION_HANDLERS[action.name](action.param);
+        } else if (action.name.startsWith('create_')) {
+          const type = action.name.replace('create_', '');
+          if (action.param && CaptureStore.TYPES.includes(type)) {
+            CaptureStore.add({ type, title: action.param, sourceMode: appMode === 'home' ? 'box' : 'session' });
+            showToast(`${CaptureStore.TYPE_LABELS[type]} criado: ${action.param}`);
+            loadDashCaptures();
+          }
+        }
+      });
+    }, 600);
+  }
+  return cleanText;
+}
+
 // One-time sync: push localStorage data to Supabase for existing users
 async function syncLocalToSupabase() {
   if (!supabaseClient || !currentUserId) return;
@@ -761,7 +801,28 @@ O sistema captura automaticamente ideias, tarefas, metas, estratégias e agendam
 - Se perceber que capturou algo, diga brevemente "Anotei, Senhor" sem interromper o fluxo.
 - Se o usuário disser "anota", "salva", "captura" — confirme: "Anotado no cockpit."
 - Se perguntar "o que anotamos?", referencie o Cockpit Estratégico.
-- Nunca repita o conteúdo completo da captura — seja breve e natural.`;
+- Nunca repita o conteúdo completo da captura — seja breve e natural.
+
+AÇÕES NO APP:
+Você pode executar ações no aplicativo incluindo tags no formato [ACTION:nome_ação] na sua resposta.
+Ações disponíveis:
+- [ACTION:open_cockpit] — Abre o Cockpit Estratégico
+- [ACTION:open_session] — Abre uma nova sessão de chat
+- [ACTION:go_home] — Volta para o Box (home)
+- [ACTION:show_costs] — Mostra os custos de API do mês
+- [ACTION:filter_tasks] — Abre o cockpit mostrando apenas tarefas
+- [ACTION:filter_objectives] — Abre o cockpit mostrando apenas objetivos
+- [ACTION:filter_ideas] — Abre o cockpit mostrando apenas ideias
+- [ACTION:filter_projects] — Abre o cockpit mostrando apenas projetos
+- [ACTION:create_task:TITULO] — Cria uma tarefa no cockpit
+- [ACTION:create_objective:TITULO] — Cria um objetivo no cockpit
+- [ACTION:create_idea:TITULO] — Cria uma ideia no cockpit
+REGRAS:
+- Use APENAS quando o usuário pedir explicitamente ("abre", "mostra", "cria", "vai para", "verifica")
+- Coloque a tag no FINAL da resposta, depois do texto
+- Sempre diga o que está fazendo ANTES da tag: "Abrindo o cockpit, Senhor. [ACTION:open_cockpit]"
+- Máximo 2 ações por resposta
+- NUNCA execute ações que o usuário não pediu`;
 
 // ===== SESSION MANAGER (localStorage) =====
 // Replaces ConversationManager with richer session model
@@ -3047,7 +3108,8 @@ async function callGrokAPIStream(userMessage, targetElement, forceProvider = nul
         if (data.token) {
           fullContent += data.token;
           if (contentEl) {
-            contentEl.innerHTML = formatMessage(fullContent, 'assistant');
+            const displayContent = fullContent.replace(/\[ACTION:\w+(?::[^\]]+)?\]/g, '');
+            contentEl.innerHTML = formatMessage(displayContent, 'assistant');
           }
           // Auto-scroll
           const scrollArea = appMode !== 'home' ? chatArea : document.querySelector('.perpetual-messages');
@@ -3194,6 +3256,8 @@ async function processCommand(text, fromVoice = false) {
     }
     return;
   }
+  if (trimmed === '/cockpit') { setAppMode('cockpit'); return; }
+  if (trimmed === '/custos' || trimmed === '/costs') { loadCostWidget(); const btn = document.getElementById('costDetailsBtn'); if (btn) btn.click(); return; }
 
   // Parse model prefix (/grok, /gemini, /gpt, /claude, /ollama, /turbo)
   const prefix = parseModelPrefix(text);
@@ -3219,7 +3283,12 @@ async function processCommand(text, fromVoice = false) {
       addMessage('', 'assistant', false);
       const msgElement = messagesWrap.lastElementChild;
 
-      const response = await callGrokAPIStream(actualText, msgElement, forceProvider, forceModel);
+      const rawResponse = await callGrokAPIStream(actualText, msgElement, forceProvider, forceModel);
+      const response = executeActions(rawResponse);
+      // Update display without action tags
+      const contentEl = msgElement.querySelector('.msg-content');
+      if (contentEl && response !== rawResponse) contentEl.innerHTML = formatMessage(response, 'assistant');
+      msgElement.dataset.rawText = response;
       appendModelBadge(msgElement);
 
       // Save conversation after streaming completes
@@ -3270,7 +3339,12 @@ async function processCommand(text, fromVoice = false) {
       addPerpetualMessage('', 'assistant');
       const msgElement = perpetualMessages.lastElementChild;
 
-      const response = await callGrokAPIStream(actualText, msgElement, forceProvider, forceModel);
+      const rawResponse = await callGrokAPIStream(actualText, msgElement, forceProvider, forceModel);
+      const response = executeActions(rawResponse);
+      // Update display without action tags
+      const pContentEl = msgElement.querySelector('.msg-content');
+      if (pContentEl && response !== rawResponse) pContentEl.innerHTML = formatMessage(response, 'assistant');
+      msgElement.dataset.rawText = response;
       appendModelBadge(msgElement);
 
       // Check if response is complex enough to suggest a session
