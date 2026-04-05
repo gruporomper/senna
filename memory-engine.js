@@ -706,15 +706,24 @@ async function getMemoryHealth(env) {
 }
 
 // ===== STRATEGIC CAPTURE CLASSIFIER =====
-const CAPTURE_PROMPT = `You are a strategic capture engine for SENNA, an AI assistant for an entrepreneur. Analyze the USER messages in this conversation and extract ACTIONABLE strategic items.
+const CAPTURE_PROMPT = `You are a strategic capture engine for SENNA, an AI assistant for an entrepreneur. Analyze the USER messages and extract strategic items using a HIERARCHICAL model.
 
-TYPES:
-- idea: creative concepts, business ideas, product ideas, content ideas
-- task: concrete actions ("preciso fazer X", "temos que Y", "comprar Z")
-- goal: objectives, OKRs, targets ("quero atingir X", "meta de Y")
-- strategy: plans, approaches, methodologies ("a estratégia é X", "vamos fazer Y")
-- schedule: calendar items, meetings, time-bound events ("reunião dia X", "lançar em Y")
-- insight: realizations, learnings, observations ("descobri que X", "percebi que Y")
+TYPES (hierarchical — from biggest to smallest):
+- objective: a big-picture end result with a deadline — something ambitious that takes months ("quero lançar X até dezembro", "objetivo é faturar Y", "meta do ano é Z")
+- project: a body of work to achieve an objective, can be broken into stages ("projeto de X", "desenvolvimento de Y", "construir Z")
+- milestone: a phase or stage within a project ("fase 1", "primeira etapa", "etapa de validação", "sprint de X")
+- task: a concrete, executable action one person does in hours/days ("comprar X", "ligar para Y", "enviar email para Z", "pesquisar W")
+- idea: a concept that is NOT yet actionable — exploratory, speculative ("e se fizéssemos X?", "pensei em Y", "talvez um dia Z")
+
+CLASSIFICATION RULES:
+- If it has a FINAL DEADLINE and is BIG/AMBITIOUS (months of work) → objective
+- If it's a body of work that can be broken into stages → project
+- If it's a phase or step within something larger → milestone
+- If it's something one person executes in hours/days → task
+- If it's conceptual, exploratory, "maybe someday" → idea
+- Calendar items, meetings, reminders → task (with deadline)
+- Realizations, learnings → idea (unless they imply an action)
+- When in doubt: prefer TASK for actionable items, IDEA for non-actionable
 
 RULES:
 - Return a JSON array. If nothing strategic, return []
@@ -722,7 +731,7 @@ RULES:
 - ONLY extract from USER messages, NEVER from assistant responses
 - title must be actionable: "Comprar teleprompter" not "Sobre compra de equipamento"
 - Infer priority: "urgente"/"preciso agora" = critical, "importante" = high, "algum dia"/"talvez" = low, default = medium
-- Infer deadlines from temporal cues: "até sexta" = calculate date, "esse mês" = end of month, "semana que vem" = next Monday. Use today's date for reference: ${new Date().toISOString().split('T')[0]}
+- Infer deadlines from temporal cues: "até sexta" = calculate date, "esse mês" = end of month, "semana que vem" = next Monday. Today: ${new Date().toISOString().split('T')[0]}
 - Maximum 5 captures per extraction
 - Skip: greetings, small talk, questions without strategic content, confirmations
 - Minimum: user message must contain strategic/actionable content (>20 chars)`;

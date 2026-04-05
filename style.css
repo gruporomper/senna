@@ -3661,6 +3661,90 @@ body.state-speaking .cockpit-state { color: #50C878; }
   padding: 60px 0;
 }
 
+/* Breadcrumb */
+.ce-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+.ce-bc-item {
+  color: var(--text-dim);
+}
+.ce-bc-link {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.ce-bc-link:hover {
+  color: var(--yellow);
+}
+.ce-bc-sep {
+  color: rgba(255,255,255,0.15);
+  margin: 0 2px;
+}
+.ce-bc-current {
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* Progress bar */
+.ce-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+.ce-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--yellow);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.ce-progress {
+  position: relative;
+}
+.ce-progress::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 100%;
+  height: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 2px;
+}
+.ce-progress-bar {
+  position: relative;
+  z-index: 1;
+}
+.ce-progress-text {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  min-width: 30px;
+  text-align: right;
+}
+
+/* Drillable cards */
+.ce-card-drillable {
+  cursor: pointer;
+}
+.ce-card-drillable:hover {
+  border-color: rgba(255,215,0,0.25);
+}
+
+/* Children count */
+.ce-card-children {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.06);
+  padding: 1px 6px;
+  border-radius: 8px;
+}
+
 /* Dashboard cockpit widget */
 .dash-cockpit {
   cursor: pointer;

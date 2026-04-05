@@ -184,13 +184,31 @@ const SennaDB = {
 // ===== CAPTURE STORE (Cockpit Estratégico) =====
 const CaptureStore = {
   KEY: 'senna_captures',
-  TYPES: ['idea', 'task', 'goal', 'strategy', 'schedule', 'insight'],
-  TYPE_LABELS: { idea: 'Ideia', task: 'Tarefa', goal: 'Meta', strategy: 'Estratégia', schedule: 'Agenda', insight: 'Insight' },
-  TYPE_COLORS: { idea: '#FFD700', task: '#00dce8', goal: '#00ff88', strategy: '#a855f7', schedule: '#f59e0b', insight: '#3b82f6' },
+  TYPES: ['objective', 'project', 'milestone', 'task', 'idea'],
+  TYPE_LABELS: { objective: 'Objetivo', project: 'Projeto', milestone: 'Etapa', task: 'Tarefa', idea: 'Ideia' },
+  TYPE_COLORS: { objective: '#FFD700', project: '#a855f7', milestone: '#00dce8', task: '#00ff88', idea: '#f59e0b' },
+  _TYPE_MIGRATION: { goal: 'objective', strategy: 'project', schedule: 'task', insight: 'idea' },
+  _migrated: false,
 
-  getAll() {
+  _migrate() {
+    if (this._migrated) return;
+    this._migrated = true;
+    const all = this._rawGetAll();
+    let changed = false;
+    all.forEach(c => {
+      if (this._TYPE_MIGRATION[c.type]) { c.type = this._TYPE_MIGRATION[c.type]; changed = true; }
+    });
+    if (changed) this.saveAll(all);
+  },
+
+  _rawGetAll() {
     try { return JSON.parse(localStorage.getItem(this.KEY) || '[]'); }
     catch { return []; }
+  },
+
+  getAll() {
+    this._migrate();
+    return this._rawGetAll();
   },
 
   saveAll(captures) {
@@ -200,6 +218,26 @@ const CaptureStore = {
   getByType(type) { return this.getAll().filter(c => c.type === type); },
   getByStatus(status) { return this.getAll().filter(c => c.status === status); },
   getActive() { return this.getAll().filter(c => c.status === 'open' || c.status === 'in_progress'); },
+
+  getChildren(parentId) { return this.getAll().filter(c => c.parentId === parentId); },
+
+  getProgress(id) {
+    const children = this.getChildren(id);
+    if (children.length === 0) return 0;
+    const done = children.filter(c => c.status === 'done').length;
+    return Math.round((done / children.length) * 100);
+  },
+
+  getAncestors(id) {
+    const all = this.getAll();
+    const ancestors = [];
+    let current = all.find(c => c.id === id);
+    while (current && current.parentId) {
+      current = all.find(c => c.id === current.parentId);
+      if (current) ancestors.unshift(current);
+    }
+    return ancestors;
+  },
 
   getCounts() {
     const all = this.getAll().filter(c => c.status !== 'archived');
@@ -1435,14 +1473,32 @@ function buildSystemPrompt() {
     });
   }
 
-  const activeCaptures = CaptureStore.getActive().slice(0, 10);
+  const activeCaptures = CaptureStore.getActive().slice(0, 15);
   if (activeCaptures.length > 0) {
     ctx += '\n\n## COCKPIT ESTRATÉGICO — ITENS ATIVOS\n';
+    // Show hierarchy: objectives first with their children indented
+    const roots = activeCaptures.filter(c => !c.parentId);
+    const byParent = {};
     activeCaptures.forEach(c => {
-      ctx += `- [${c.type.toUpperCase()}] ${c.title}`;
+      if (c.parentId) {
+        if (!byParent[c.parentId]) byParent[c.parentId] = [];
+        byParent[c.parentId].push(c);
+      }
+    });
+    roots.forEach(c => {
+      const progress = CaptureStore.getProgress(c.id);
+      ctx += `- [${(CaptureStore.TYPE_LABELS[c.type] || c.type).toUpperCase()}] ${c.title}`;
       if (c.deadline) ctx += ` (prazo: ${new Date(c.deadline).toLocaleDateString('pt-BR')})`;
+      if (progress > 0) ctx += ` [${progress}% concluído]`;
       if (c.status === 'in_progress') ctx += ' [EM ANDAMENTO]';
       ctx += '\n';
+      if (byParent[c.id]) {
+        byParent[c.id].forEach(child => {
+          ctx += `  - [${(CaptureStore.TYPE_LABELS[child.type] || child.type).toUpperCase()}] ${child.title}`;
+          if (child.status === 'in_progress') ctx += ' [EM ANDAMENTO]';
+          ctx += '\n';
+        });
+      }
     });
   }
 
@@ -4909,6 +4965,7 @@ function loadDashNotes() {
 // ===== COCKPIT ESTRATÉGICO =====
 let ceFilter = 'all';
 let ceStatus = 'open';
+let ceParentId = null; // null = root level, id = drill-down into parent
 
 function loadDashCaptures() {
   const counts = CaptureStore.getCounts();
@@ -4926,15 +4983,48 @@ function loadDashCaptures() {
   }
 }
 
+function renderBreadcrumb() {
+  const bc = document.getElementById('ceBreadcrumb');
+  if (!bc) return;
+  if (!ceParentId) {
+    bc.innerHTML = '';
+    bc.style.display = 'none';
+    return;
+  }
+  const ancestors = CaptureStore.getAncestors(ceParentId);
+  const current = CaptureStore.getAll().find(c => c.id === ceParentId);
+  if (!current) { bc.innerHTML = ''; bc.style.display = 'none'; return; }
+
+  bc.style.display = 'flex';
+  let html = `<span class="ce-bc-item ce-bc-link" data-id="">Cockpit</span>`;
+  ancestors.forEach(a => {
+    html += `<span class="ce-bc-sep">/</span><span class="ce-bc-item ce-bc-link" data-id="${a.id}">${escapeHtml(a.title).substring(0, 30)}</span>`;
+  });
+  html += `<span class="ce-bc-sep">/</span><span class="ce-bc-item ce-bc-current">${escapeHtml(current.title).substring(0, 40)}</span>`;
+  bc.innerHTML = html;
+
+  bc.querySelectorAll('.ce-bc-link').forEach(link => {
+    link.addEventListener('click', () => {
+      ceParentId = link.dataset.id || null;
+      renderCockpit();
+    });
+  });
+}
+
 function renderCockpit() {
   const container = document.getElementById('ceItems');
   if (!container) return;
 
+  renderBreadcrumb();
+
   const all = CaptureStore.getAll();
   const filtered = all
+    .filter(c => ceParentId ? c.parentId === ceParentId : !c.parentId)
     .filter(c => ceFilter === 'all' || c.type === ceFilter)
     .filter(c => c.status === ceStatus)
     .sort((a, b) => {
+      const typeOrder = { objective: 0, project: 1, milestone: 2, task: 3, idea: 4 };
+      if (typeOrder[a.type] !== typeOrder[b.type]) return typeOrder[a.type] - typeOrder[b.type];
       const prio = { critical: 0, high: 1, medium: 2, low: 3 };
       if (prio[a.priority] !== prio[b.priority]) return prio[a.priority] - prio[b.priority];
       if (a.deadline && !b.deadline) return -1;
@@ -4970,16 +5060,22 @@ function renderCockpit() {
     const isOverdue = c.deadline && c.status === 'open' && new Date(c.deadline) < now;
     const deadlineStr = c.deadline ? new Date(c.deadline).toLocaleDateString('pt-BR') : '';
     const prioClass = c.priority === 'critical' ? 'ce-prio-critical' : c.priority === 'high' ? 'ce-prio-high' : '';
+    const children = CaptureStore.getChildren(c.id);
+    const hasChildren = children.length > 0;
+    const progress = hasChildren ? CaptureStore.getProgress(c.id) : -1;
+    const canDrillDown = ['objective', 'project', 'milestone'].includes(c.type);
 
-    return `<div class="ce-card ${prioClass}" data-id="${c.id}" style="border-left-color:${color}">
+    return `<div class="ce-card ${prioClass} ${canDrillDown ? 'ce-card-drillable' : ''}" data-id="${c.id}" style="border-left-color:${color}">
       <div class="ce-card-header">
         <span class="ce-card-badge" style="background:${color}">${label}</span>
         ${c.priority === 'critical' ? '<span class="ce-card-prio">URGENTE</span>' : ''}
         ${c.priority === 'high' ? '<span class="ce-card-prio ce-card-prio-high">ALTA</span>' : ''}
+        ${hasChildren ? `<span class="ce-card-children">${children.length} ${children.length === 1 ? 'item' : 'itens'}</span>` : ''}
         ${deadlineStr ? `<span class="ce-card-deadline ${isOverdue ? 'ce-overdue' : ''}">${isOverdue ? '⚠ ' : ''}${deadlineStr}</span>` : ''}
       </div>
       <div class="ce-card-title">${escapeHtml(c.title)}</div>
       ${c.body ? `<div class="ce-card-body">${escapeHtml(c.body).substring(0, 150)}</div>` : ''}
+      ${progress >= 0 ? `<div class="ce-progress"><div class="ce-progress-bar" style="width:${progress}%"></div><span class="ce-progress-text">${progress}%</span></div>` : ''}
       ${c.tags && c.tags.length ? `<div class="ce-card-tags">${c.tags.map(t => `<span class="ce-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
       <div class="ce-card-actions">
         ${c.status === 'open' ? `<button class="ce-action" data-action="in_progress" data-id="${c.id}">Iniciar</button>` : ''}
@@ -4990,6 +5086,15 @@ function renderCockpit() {
       </div>
     </div>`;
   }).join('');
+
+  // Attach card click for drill-down
+  container.querySelectorAll('.ce-card-drillable').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.ce-action')) return;
+      ceParentId = card.dataset.id;
+      renderCockpit();
+    });
+  });
 
   // Attach actions
   container.querySelectorAll('.ce-action').forEach(btn => {
@@ -5023,7 +5128,15 @@ function renderCockpit() {
 
   if (backBtn) {
     backBtn.addEventListener('click', () => {
-      setAppMode('home');
+      if (ceParentId) {
+        // Go up one level
+        const all = CaptureStore.getAll();
+        const current = all.find(c => c.id === ceParentId);
+        ceParentId = current ? current.parentId || null : null;
+        renderCockpit();
+      } else {
+        setAppMode('home');
+      }
     });
   }
 
