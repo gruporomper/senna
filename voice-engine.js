@@ -176,6 +176,18 @@
 
       this.available = true;
       console.log(`[VoiceEngine] Available. STT: ${this.useWebSpeechSTT ? 'Web Speech API' : 'AssemblyAI'}`);
+
+      // Retomar AudioContext quando o usuário volta para a aba
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && this.state !== 'IDLE') {
+          if (this.ttsAudioContext && this.ttsAudioContext.state === 'suspended') {
+            this.ttsAudioContext.resume().catch(() => {});
+          }
+          if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(() => {});
+          }
+        }
+      });
     },
 
     async activate() {
@@ -187,6 +199,19 @@
       this.metrics.totalSessions++;
 
       try {
+        // Verificar permissão de microfone antes de tudo
+        try {
+          const permStatus = await navigator.permissions.query({ name: 'microphone' });
+          if (permStatus.state === 'denied') {
+            console.error('[VoiceEngine] Permissão de microfone negada');
+            this._showVoiceError('Permissão de microfone negada. Verifique as configurações do navegador.');
+            this.transition('ERROR');
+            return;
+          }
+        } catch (permErr) {
+          // permissions.query pode não estar disponível — seguir em frente
+        }
+
         if (this.useWebSpeechSTT) {
           // Web Speech API mode — no AudioWorklet or AssemblyAI needed
           this._initWebSpeechRecognition();
@@ -207,6 +232,10 @@
         if (!this.ttsAudioContext || this.ttsAudioContext.state === 'closed') {
           this._initTTSAudioContext();
         }
+        // Garantir que TTS AudioContext não está suspenso (ex: troca de aba)
+        if (this.ttsAudioContext && this.ttsAudioContext.state === 'suspended') {
+          await this.ttsAudioContext.resume();
+        }
 
         this.transition('LISTENING');
         this._showRecordingUI();
@@ -216,6 +245,10 @@
 
       } catch (err) {
         console.error('[VoiceEngine] Activation failed:', err);
+        const msg = err.name === 'NotAllowedError' ? 'Permissão de microfone negada.'
+                  : err.name === 'NotFoundError' ? 'Nenhum microfone encontrado.'
+                  : 'Erro ao ativar voz: ' + err.message;
+        this._showVoiceError(msg);
         this.cleanup();
         this.transition('ERROR');
       }
@@ -810,7 +843,24 @@
       } catch (err) {
         if (err.name === 'AbortError') return; // barge-in
         console.error('[VoiceEngine] TTS fetch error:', err);
-        item.status = 'ready'; // skip this chunk
+        // Tentar fallback com Web Speech API para este chunk
+        try {
+          const synth = window.speechSynthesis;
+          if (synth) {
+            const utter = new SpeechSynthesisUtterance(item.text);
+            utter.lang = 'pt-BR';
+            utter.rate = 1.05;
+            const voices = synth.getVoices();
+            const ptVoice = voices.find(v => v.lang.startsWith('pt'));
+            if (ptVoice) utter.voice = ptVoice;
+            utter.onend = () => { this._processTTSQueue(); };
+            utter.onerror = () => { this._processTTSQueue(); };
+            synth.speak(utter);
+          }
+        } catch (fallbackErr) {
+          console.error('[VoiceEngine] TTS fallback also failed:', fallbackErr);
+        }
+        item.status = 'ready';
         item.audioBuffer = null;
         this.playNextChunk();
       }
@@ -1093,7 +1143,19 @@
       // 7. Restart Web Speech Recognition if in fallback mode
       if (this.useWebSpeechSTT && this.webSpeechRecognition) {
         setTimeout(() => {
-          try { this.webSpeechRecognition.start(); } catch(e) {}
+          try {
+            this.webSpeechRecognition.start();
+          } catch(e) {
+            console.error('[VoiceEngine] Falha ao reiniciar reconhecimento após barge-in:', e);
+            // Re-inicializar o recognition do zero
+            try {
+              this._initWebSpeechRecognition();
+              this.webSpeechRecognition.start();
+            } catch(e2) {
+              console.error('[VoiceEngine] Re-init do recognition falhou:', e2);
+              this.transition('ERROR');
+            }
+          }
         }, 150);
       }
     },
@@ -1149,7 +1211,16 @@
 
       // Resume TTS playback
       if (this.ttsAudioContext && this.ttsAudioContext.state === 'suspended') {
-        this.ttsAudioContext.resume();
+        this.ttsAudioContext.resume().catch(err => console.error('[VoiceEngine] TTS resume failed:', err));
+      }
+      // Resume mic AudioContext também
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(err => console.error('[VoiceEngine] Mic AudioContext resume failed:', err));
+      }
+
+      // Renovar STT token se expirou durante a pausa
+      if (!this.useWebSpeechSTT && this.sttToken && Date.now() > this.sttTokenExpiresAt - 60000) {
+        this._reconnectSTT();
       }
 
       // If was speaking, TTS will continue on its own after resume
@@ -1158,7 +1229,10 @@
         this.transition('LISTENING');
         if (this.useWebSpeechSTT && this.webSpeechRecognition) {
           setTimeout(() => {
-            try { this.webSpeechRecognition.start(); } catch (e) {}
+            try { this.webSpeechRecognition.start(); } catch (e) {
+              console.error('[VoiceEngine] Falha ao retomar reconhecimento:', e);
+              try { this._initWebSpeechRecognition(); this.webSpeechRecognition.start(); } catch(e2) {}
+            }
           }, 200);
         }
       } else if (this.pausedState === 'SPEAKING') {
@@ -1212,6 +1286,18 @@
     },
 
     // ===== UI HELPERS =====
+
+    _showVoiceError(msg) {
+      console.error('[VoiceEngine]', msg);
+      // Mostrar toast/notificação para o usuário
+      if (typeof showToast === 'function') {
+        showToast(msg, 'error');
+      } else {
+        // Fallback: mostrar no cockpit transcript
+        const ct = document.getElementById('cockpitTranscript');
+        if (ct) { ct.textContent = msg; ct.style.color = '#ff4444'; }
+      }
+    },
 
     _showRecordingUI() {
       const transcript = document.getElementById('cockpitTranscript');

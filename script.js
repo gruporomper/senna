@@ -4306,22 +4306,31 @@ async function speak(text, onEnd) {
     const audio = new Audio(audioUrl);
     currentAudio = audio;
 
-    audio.onended = () => {
+    const cleanupAudio = () => {
       URL.revokeObjectURL(audioUrl);
       currentAudio = null;
       stopSpeakingAnimation();
-      if (onEnd) onEnd();
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(audioUrl);
-      currentAudio = null;
-      stopSpeakingAnimation();
-      if (onEnd) onEnd();
     };
 
-    // Connect to analyser for helmet pulse
+    audio.onended = () => {
+      cleanupAudio();
+      if (onEnd) onEnd();
+    };
+    audio.onerror = (e) => {
+      console.error('Audio playback error:', e);
+      cleanupAudio();
+      speakFallback(text, onEnd);
+    };
+
+    // Reuse AudioContext instead of creating a new one each time
     try {
-      speakAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!speakAudioCtx || speakAudioCtx.state === 'closed') {
+        speakAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      // Resume if suspended (e.g. after tab switch)
+      if (speakAudioCtx.state === 'suspended') {
+        await speakAudioCtx.resume();
+      }
       speakAnalyser = speakAudioCtx.createAnalyser();
       speakAnalyser.fftSize = 256;
       const source = speakAudioCtx.createMediaElementSource(audio);
@@ -4329,11 +4338,16 @@ async function speak(text, onEnd) {
       speakAnalyser.connect(speakAudioCtx.destination);
     } catch(e) {
       console.warn('Could not create speak analyser:', e);
+      // Play without analyser — audio still works
     }
 
     audio.play().then(() => {
       if (speakAnalyser) animateSpeakingHelmet();
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error('Audio play() failed:', err);
+      cleanupAudio();
+      speakFallback(text, onEnd);
+    });
   } catch (error) {
     console.error('Kokoro TTS fetch error:', error);
     speakFallback(text, onEnd);
@@ -4345,14 +4359,27 @@ function speakFallback(text, onEnd) {
   utterance.lang = 'pt-BR';
   utterance.rate = 1.05;
   utterance.pitch = 0.95;
+
+  const trySpeak = () => {
+    const voices = synthesis.getVoices();
+    const ptVoice = voices.find(v => v.lang.startsWith('pt') && v.name.includes('Google')) ||
+                    voices.find(v => v.lang.startsWith('pt-BR')) ||
+                    voices.find(v => v.lang.startsWith('pt'));
+    if (ptVoice) utterance.voice = ptVoice;
+    utterance.onend = () => { stopSpeakingAnimation(); if (onEnd) onEnd(); };
+    utterance.onerror = (e) => { console.error('SpeechSynthesis error:', e); stopSpeakingAnimation(); if (onEnd) onEnd(); };
+    synthesis.speak(utterance);
+  };
+
+  // getVoices() pode retornar vazio na primeira chamada — esperar evento
   const voices = synthesis.getVoices();
-  const ptVoice = voices.find(v => v.lang.startsWith('pt') && v.name.includes('Google')) ||
-                  voices.find(v => v.lang.startsWith('pt-BR')) ||
-                  voices.find(v => v.lang.startsWith('pt'));
-  if (ptVoice) utterance.voice = ptVoice;
-  utterance.onend = () => { if (onEnd) onEnd(); };
-  utterance.onerror = () => { if (onEnd) onEnd(); };
-  synthesis.speak(utterance);
+  if (voices.length === 0) {
+    speechSynthesis.addEventListener('voiceschanged', trySpeak, { once: true });
+    // Timeout caso o evento nunca dispare
+    setTimeout(() => { if (!utterance.voice) trySpeak(); }, 500);
+  } else {
+    trySpeak();
+  }
 }
 
 // ===== SPEECH RECOGNITION =====
@@ -7367,7 +7394,19 @@ function init() {
 
   // Initialize Voice Engine (async, non-blocking)
   if (window.VoiceEngine) {
-    window.VoiceEngine.init().catch(err => console.warn('[VoiceEngine] Init failed:', err));
+    window.VoiceEngine.init().then(() => {
+      if (!window.VoiceEngine.isAvailable()) {
+        console.warn('[VoiceEngine] Voz indisponível — desabilitando controles');
+        const orbBtn = document.getElementById('mainOrb') || document.getElementById('orbBtn');
+        if (orbBtn) { orbBtn.style.opacity = '0.3'; orbBtn.title = 'Voz indisponível neste navegador'; }
+        const micBtn = document.getElementById('micBtn');
+        if (micBtn) { micBtn.disabled = true; micBtn.style.opacity = '0.3'; micBtn.title = 'Microfone indisponível'; }
+      }
+    }).catch(err => {
+      console.warn('[VoiceEngine] Init failed:', err);
+      const orbBtn = document.getElementById('mainOrb') || document.getElementById('orbBtn');
+      if (orbBtn) { orbBtn.style.opacity = '0.3'; orbBtn.title = 'Erro na inicialização de voz'; }
+    });
   }
 
   // Wire sidebar nav buttons for new modules
