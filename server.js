@@ -622,14 +622,14 @@ http.createServer(async (req, res) => {
     return;
   }
 
-  // API Proxy: /api/tts → Kokoro TTS (localhost:8880)
+  // API Proxy: /api/tts → Qwen3-TTS (localhost:8880)
   if (req.url === '/api/tts' && req.method === 'POST') {
     try {
       const body = await readBody(req);
       const postData = JSON.stringify(JSON.parse(body));
 
-      const kokoroBase = process.env.KOKORO_URL || 'http://localhost:8880';
-      const kokoroParsed = new URL(kokoroBase);
+      const ttsBase = process.env.TTS_URL || process.env.KOKORO_URL || 'http://localhost:8880';
+      const kokoroParsed = new URL(ttsBase);
       const apiReq = (kokoroParsed.protocol === 'https:' ? https : http).request({
         hostname: kokoroParsed.hostname,
         port: kokoroParsed.port || (kokoroParsed.protocol === 'https:' ? 443 : 8880),
@@ -648,7 +648,7 @@ http.createServer(async (req, res) => {
         apiRes.pipe(res);
       });
       apiReq.on('error', (err) => {
-        console.error('Kokoro TTS proxy error:', err);
+        console.error('TTS proxy error:', err);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
       });
@@ -712,19 +712,19 @@ http.createServer(async (req, res) => {
       checks.ollama = 'not_configured';
     }
 
-    // Check Kokoro TTS
-    const kokoroUrl = process.env.KOKORO_URL || 'http://localhost:8880';
+    // Check Qwen3-TTS
+    const ttsUrl = process.env.TTS_URL || process.env.KOKORO_URL || 'http://localhost:8880';
     try {
-      const kokoroOk = await new Promise((resolve) => {
-        const req = http.get(kokoroUrl, { timeout: 3000 }, (r) => {
+      const ttsOk = await new Promise((resolve) => {
+        const req = http.get(ttsUrl, { timeout: 3000 }, (r) => {
           resolve(r.statusCode < 500);
         });
         req.on('error', () => resolve(false));
         req.on('timeout', () => { req.destroy(); resolve(false); });
       });
-      checks.kokoro_tts = kokoroOk ? 'ok' : 'down';
-      if (!kokoroOk) errors.push('kokoro_tts');
-    } catch { checks.kokoro_tts = 'down'; errors.push('kokoro_tts'); }
+      checks.tts = ttsOk ? 'ok' : 'down';
+      if (!ttsOk) errors.push('tts');
+    } catch { checks.tts = 'down'; errors.push('tts'); }
 
     // Check n8n
     try {

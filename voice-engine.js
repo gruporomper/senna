@@ -22,8 +22,8 @@
 
     // TTS
     ttsEndpoint: '/api/tts',
-    ttsVoice: 'pm_alex',
-    ttsModel: 'kokoro',
+    ttsVoice: 'Evan',
+    ttsModel: 'qwen3-tts',
     ttsMaxInFlight: 2, // max parallel TTS fetches
     ttsFormat: 'wav',
 

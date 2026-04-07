@@ -4242,8 +4242,8 @@ async function processCommand(text, fromVoice = false) {
   }
 }
 
-// ===== KOKORO TTS (self-hosted) =====
-// Self-hosted Kokoro TTS at VPS 72.60.123.52:8880 (OpenAI-compatible API)
+// ===== QWEN3-TTS (self-hosted) =====
+// Self-hosted Qwen3-TTS at VPS (OpenAI-compatible API on port 8880)
 let currentAudio = null;
 let speakAudioCtx = null;
 let speakAnalyser = null;
@@ -4288,15 +4288,15 @@ async function speak(text, onEnd) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'kokoro',
+        model: 'qwen3-tts',
         input: text,
-        voice: 'pm_alex',
+        voice: 'Evan',
         response_format: 'wav'
       })
     });
 
     if (!response.ok) {
-      console.error('Kokoro TTS error:', response.status);
+      console.error('Qwen3-TTS error:', response.status);
       speakFallback(text, onEnd);
       return;
     }
@@ -4349,7 +4349,7 @@ async function speak(text, onEnd) {
       speakFallback(text, onEnd);
     });
   } catch (error) {
-    console.error('Kokoro TTS fetch error:', error);
+    console.error('Qwen3-TTS fetch error:', error);
     speakFallback(text, onEnd);
   }
 }
